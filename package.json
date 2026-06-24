@@ -1,0 +1,19 @@
+{
+  "name": "mnemo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vendor-agnostic AI agent memory — MCP server backed by knowledge graph + RAG",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "dev": "pnpm --filter mcp-server dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^22.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3"]
+  }
+}
