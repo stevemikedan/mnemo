@@ -30,10 +30,11 @@ export interface ConsolidateSessionResult {
 export async function dream(store: MemoryStore, graph: GraphStore, opts: DreamOptions = {}): Promise<DreamStats> {
   const startMs = Date.now();
 
-  // Fetch memories to consolidate
-  let memories = store.query({ states: ['active', 'dormant'] });
+  // Fetch memories to consolidate — resolve CWD for scope-aware query
+  const queryCwd = opts.cwd ?? opts.scope;
+  let memories = store.query({ states: ['active', 'dormant'], cwd: queryCwd });
+  // If an exact scope was requested, filter down further
   if (opts.scope && opts.scope !== 'global') {
-    // Filter to exact scope (e.g. just one project)
     memories = memories.filter(m => m.scope === opts.scope || m.scope === 'global');
   }
 
