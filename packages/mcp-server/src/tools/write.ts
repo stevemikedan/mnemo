@@ -49,9 +49,60 @@ export function registerWriteTools(server: McpServer, store: MemoryStore, graph:
       weight: z.number().min(0).max(1).optional().default(1.0),
     }),
   }, async ({ from_id, to_id, relation_type, weight }) => {
-    const edge = graph.addEdge(from_id, to_id, relation_type as EdgeType, weight);
+    graph.addEdge(from_id, to_id, relation_type as EdgeType, weight);
     return {
       content: [{ type: 'text' as const, text: `Linked ${from_id} → ${to_id} (${relation_type})` }],
+    };
+  });
+
+  server.registerTool('update', {
+    description: 'Edit an existing memory. Only the fields you pass are changed; the rest are left as-is.',
+    inputSchema: z.object({
+      memory_id: z.string().describe('The ID of the memory to update'),
+      content: z.string().optional(),
+      type: z.enum(['user', 'feedback', 'project', 'reference', 'episodic', 'semantic']).optional(),
+      scope: z.string().optional().describe('global | project:{abs_path}'),
+      state: z.enum(['active', 'dormant', 'archived', 'expired']).optional(),
+      importance: z.number().min(0).max(1).optional(),
+      tags: z.array(z.string()).optional(),
+    }),
+  }, async ({ memory_id, content, type, scope, state, importance, tags }) => {
+    const patch: Record<string, unknown> = {};
+    if (content !== undefined) patch.content = content;
+    if (type !== undefined) patch.type = type;
+    if (scope !== undefined) patch.scope = scope;
+    if (state !== undefined) patch.state = state;
+    if (importance !== undefined) patch.importance = importance;
+    if (tags !== undefined) patch.tags = tags;
+    const ok = store.update(memory_id, patch as any);
+    const changed = Object.keys(patch).join(', ') || 'nothing';
+    return {
+      content: [{ type: 'text' as const, text: ok ? `Updated memory ${memory_id} (${changed}).` : `Memory ${memory_id} not found, or no fields to update.` }],
+    };
+  });
+
+  server.registerTool('unlink', {
+    description: 'Remove the relationship(s) between two memories (in either direction).',
+    inputSchema: z.object({
+      from_id: z.string(),
+      to_id: z.string(),
+    }),
+  }, async ({ from_id, to_id }) => {
+    const n = graph.removeEdge(from_id, to_id);
+    return {
+      content: [{ type: 'text' as const, text: n > 0 ? `Removed ${n} edge(s) between ${from_id} and ${to_id}.` : `No edges found between ${from_id} and ${to_id}.` }],
+    };
+  });
+
+  server.registerTool('delete_memory', {
+    description: 'Permanently delete a memory and its edges. Irreversible — prefer `forget` (soft delete) unless you truly want it gone.',
+    inputSchema: z.object({
+      memory_id: z.string().describe('The ID of the memory to permanently delete'),
+    }),
+  }, async ({ memory_id }) => {
+    const ok = store.delete(memory_id);
+    return {
+      content: [{ type: 'text' as const, text: ok ? `Permanently deleted memory ${memory_id}.` : `Memory ${memory_id} not found.` }],
     };
   });
 }

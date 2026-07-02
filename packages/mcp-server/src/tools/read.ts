@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { MemoryStore } from '@mnemo/core';
 import type { GraphStore } from '@mnemo/core';
 import type { RecallEngine } from '@mnemo/core';
-import type { MemoryType } from '@mnemo/core';
+import type { MemoryType, MemoryState } from '@mnemo/core';
 
 function formatMemory(m: { id: string; content: string; type: string; scope: string; importance: number; tags: string[]; created_at: string }, score?: number): string {
   const scoreStr = score !== undefined ? ` [score: ${score.toFixed(3)}]` : '';
@@ -18,15 +18,21 @@ export function registerReadTools(server: McpServer, store: MemoryStore, graph: 
       scope: z.string().optional().describe('Your project scope (e.g. project:/path/to/repo). Returns global memories plus that project\'s. Omit to search across all scopes.'),
       cwd: z.string().optional().describe('Current working directory (absolute path) — resolves to global + any ancestor project scope. Alternative to passing scope.'),
       types: z.array(z.enum(['user', 'feedback', 'project', 'reference', 'episodic', 'semantic'])).optional(),
+      tags: z.array(z.string()).optional().describe('Only include memories carrying at least one of these tags.'),
+      states: z.array(z.enum(['active', 'dormant', 'archived', 'expired'])).optional().describe('Memory states to include. Defaults to active + dormant.'),
+      min_importance: z.number().min(0).max(1).optional().describe('Drop memories below this importance.'),
       limit: z.number().int().min(1).max(50).optional().default(10),
       include_related: z.boolean().optional().default(false),
     }),
-  }, async ({ query, scope, cwd, types, limit, include_related }) => {
+  }, async ({ query, scope, cwd, types, tags, states, min_importance, limit, include_related }) => {
     const results = await recall.recall({
       query,
       scope,
       cwd,
       types: types as MemoryType[] | undefined,
+      tags,
+      states: states as MemoryState[] | undefined,
+      minImportance: min_importance,
       limit,
       includeRelated: include_related,
     });
@@ -102,5 +108,16 @@ export function registerReadTools(server: McpServer, store: MemoryStore, graph: 
       `Distinct scopes: ${status.byScope}`,
     ].join('\n');
     return { content: [{ type: 'text' as const, text }] };
+  });
+
+  server.registerTool('list_scopes', {
+    description: 'List the distinct scopes present in the store (e.g. "global", "project:/abs/path"). Use these exact strings for the scope arguments of recall/list_memories/remember.',
+    inputSchema: z.object({}),
+  }, async () => {
+    const scopes = store.listScopes();
+    if (scopes.length === 0) {
+      return { content: [{ type: 'text' as const, text: 'No scopes yet — the store is empty.' }] };
+    }
+    return { content: [{ type: 'text' as const, text: `Scopes (${scopes.length}):\n${scopes.map(s => `- ${s}`).join('\n')}` }] };
   });
 }

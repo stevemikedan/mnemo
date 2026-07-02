@@ -10,6 +10,8 @@ export interface RecallOptions extends QueryOptions {
   query: string;
   limit?: number;
   includeRelated?: boolean;
+  /** Drop candidates below this importance before ranking. */
+  minImportance?: number;
 }
 
 export interface RecallResult {
@@ -27,12 +29,15 @@ export class RecallEngine {
   ) {}
 
   async recall(opts: RecallOptions): Promise<RecallResult[]> {
-    const candidates = this.store.query({
+    let candidates = this.store.query({
       cwd: opts.cwd ?? opts.scope,
       types: opts.types,
       states: opts.states,
       tags: opts.tags,
     });
+    if (opts.minImportance != null) {
+      candidates = candidates.filter(c => c.importance >= opts.minImportance!);
+    }
 
     // Rebuild the index on every recall. Keying on candidate count (the prior
     // approach) reused a stale index whenever a different scope or an edit

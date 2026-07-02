@@ -122,6 +122,17 @@ export class MemoryStore {
     return result.changes > 0;
   }
 
+  /** Permanently delete a memory (and its edges via ON DELETE CASCADE). */
+  delete(id: string): boolean {
+    return this.db.prepare('DELETE FROM memories WHERE id = ?').run(id).changes > 0;
+  }
+
+  /** Distinct scope strings present in the store, sorted. */
+  listScopes(): string[] {
+    return (this.db.prepare('SELECT DISTINCT scope FROM memories ORDER BY scope ASC').all() as { scope: string }[])
+      .map(r => r.scope);
+  }
+
   /**
    * Query memories, filtered by state, scope, type, tags, and limit.
    *

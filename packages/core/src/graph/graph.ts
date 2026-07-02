@@ -35,4 +35,12 @@ export class GraphStore {
   getEdges(fromId: string): MemoryEdge[] {
     return this.db.prepare('SELECT * FROM memory_edges WHERE from_id = ?').all(fromId) as MemoryEdge[];
   }
+
+  /** Remove any edge(s) between two memories, in either direction. Returns the count removed. */
+  removeEdge(fromId: string, toId: string): number {
+    return this.db.prepare(
+      `DELETE FROM memory_edges
+       WHERE (from_id = ? AND to_id = ?) OR (from_id = ? AND to_id = ?)`,
+    ).run(fromId, toId, toId, fromId).changes;
+  }
 }
