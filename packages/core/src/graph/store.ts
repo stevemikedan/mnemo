@@ -101,6 +101,11 @@ export class MemoryStore {
       .run(new Date().toISOString(), id);
   }
 
+  /** Persist a precomputed embedding vector (BLOB) for a memory. */
+  setEmbedding(id: string, embedding: Buffer): void {
+    this.db.prepare('UPDATE memories SET embedding = ? WHERE id = ?').run(embedding, id);
+  }
+
   update(id: string, patch: Partial<Pick<Memory, 'content' | 'type' | 'scope' | 'state' | 'importance' | 'confidence' | 'tags' | 'metadata'>>): boolean {
     const sets: string[] = [];
     const params: Record<string, unknown> = { id };

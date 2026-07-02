@@ -10,9 +10,11 @@ export interface MnemoConfig {
     baseUrl?: string;
   };
   embeddings?: {
+    /** 'none' (default), 'openai' (OpenAI-compatible /embeddings), or 'ollama'. */
     provider?: string;
     model?: string;
     baseUrl?: string;
+    apiKey?: string;
   };
   decay?: {
     /** Master switch for the decay/lifecycle pass. Default true. */

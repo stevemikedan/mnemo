@@ -114,6 +114,7 @@ export function apiPlugin() {
             const rows = store.db.prepare(sql).all(...queryParams) as any[];
             let parsed = rows.map(r => ({
               ...r,
+              embedding: undefined, // never ship the vector BLOB to the client
               tags: JSON.parse(r.tags),
               metadata: JSON.parse(r.metadata)
             }));
@@ -168,6 +169,7 @@ export function apiPlugin() {
             const nodes = store.db.prepare('SELECT * FROM memories').all() as any[];
             let parsedNodes = nodes.map(n => ({
               ...n,
+              embedding: undefined, // never ship the vector BLOB to the client
               tags: JSON.parse(n.tags),
               metadata: JSON.parse(n.metadata),
             }));
