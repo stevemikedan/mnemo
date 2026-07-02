@@ -91,6 +91,16 @@ export class MemoryStore {
     return deserialize(row);
   }
 
+  /**
+   * Record a retrieval: bump access_count and last_accessed without the extra
+   * SELECT that get() does. This is the reinforcement signal the decay pass
+   * reads — recalling a memory strengthens it (spaced repetition).
+   */
+  recordAccess(id: string): void {
+    this.db.prepare('UPDATE memories SET access_count = access_count + 1, last_accessed = ? WHERE id = ?')
+      .run(new Date().toISOString(), id);
+  }
+
   update(id: string, patch: Partial<Pick<Memory, 'content' | 'type' | 'scope' | 'state' | 'importance' | 'confidence' | 'tags' | 'metadata'>>): boolean {
     const sets: string[] = [];
     const params: Record<string, unknown> = { id };

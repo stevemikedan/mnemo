@@ -20,6 +20,8 @@ export function registerDreamTools(server: McpServer, store: MemoryStore, graph:
       `- Left unchanged: ${stats.unchanged}`,
       `- Cross-links added: ${stats.linked}`,
       `- Promoted (TiMem): ${stats.promoted}`,
+      `- Decayed → dormant/archived/expired: ${stats.decayed_dormant}/${stats.decayed_archived}/${stats.decayed_expired}`,
+      `- Reactivated (reinforced): ${stats.reactivated}`,
       `- Duration: ${stats.duration_ms}ms`,
     ];
     return { content: [{ type: 'text' as const, text: lines.join('\n') }] };

@@ -6,6 +6,7 @@ export { resolveScope, isScopeVisible } from './access.js';
 export { extractSignals } from './consolidation/session.js';
 export { runNREM } from './consolidation/nrem.js';
 export { runREM } from './consolidation/rem.js';
+export { runDecay, retentionOf } from './consolidation/decay.js';
 export { dream, consolidateSession, getDreamLog } from './consolidation/dream.js';
 export type {
   Memory,
@@ -20,4 +21,5 @@ export type { RecallOptions, RecallResult } from './rag/recall.js';
 export type { ExtractedSignal } from './consolidation/session.js';
 export type { NREMStats } from './consolidation/nrem.js';
 export type { REMStats } from './consolidation/rem.js';
+export type { DecayStats, DecayOptions } from './consolidation/decay.js';
 export type { DreamOptions, DreamStats, ConsolidateSessionResult } from './consolidation/dream.js';

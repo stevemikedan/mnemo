@@ -57,6 +57,9 @@ export class RecallEngine {
 
     const top = results.slice(0, limit);
 
+    // Reinforcement: recalling a memory strengthens it against decay.
+    for (const r of top) this.store.recordAccess(r.memory.id);
+
     if (!opts.includeRelated) {
       return top.map(r => ({ memory: r.memory, score: r.score }));
     }

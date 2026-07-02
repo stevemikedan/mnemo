@@ -519,7 +519,7 @@ export default function App() {
 
       if (res.ok) {
         const stats = await res.json();
-        setDreamStatus(`Dream finished: Merged ${stats.merged}, Linked ${stats.linked}, Promoted ${stats.promoted}`);
+        setDreamStatus(`Dream finished: Merged ${stats.merged}, Linked ${stats.linked}, Decayed ${(stats.decayed_dormant || 0) + (stats.decayed_archived || 0) + (stats.decayed_expired || 0)}, Reactivated ${stats.reactivated || 0}`);
         refresh();
       } else {
         setDreamStatus('Memory consolidation failed.');
@@ -1313,7 +1313,7 @@ export default function App() {
                       Phase: <strong>{log.phase}</strong> | Scope: <strong>{log.scope}</strong>
                     </div>
                     <div className="log-entry-stats">
-                      Stats: processed={log.stats.total_processed || 0}, merged={log.stats.merged || 0}, linked={log.stats.linked || 0}, promoted={log.stats.promoted || 0}, duration={log.stats.duration_ms || 0}ms
+                      Stats: processed={log.stats.total_processed || 0}, merged={log.stats.merged || 0}, linked={log.stats.linked || 0}, dormant={log.stats.toDormant || 0}, archived={log.stats.toArchived || 0}, expired={log.stats.expired || 0}, reactivated={log.stats.reactivated || 0}, duration={log.stats.duration_ms || 0}ms
                     </div>
                   </div>
                 ))

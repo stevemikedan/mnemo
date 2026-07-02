@@ -4,6 +4,7 @@ import type { GraphStore } from '../graph/graph.js';
 import { extractSignals } from './session.js';
 import { runNREM } from './nrem.js';
 import { runREM } from './rem.js';
+import { runDecay } from './decay.js';
 
 export interface DreamOptions {
   /** Exact scope to consolidate, e.g. 'project:/path/to/repo' or 'global'. Defaults to all active memories. */
@@ -18,6 +19,14 @@ export interface DreamStats {
   linked: number;
   promoted: number;
   total_processed: number;
+  /** Memories moved active→dormant this pass. */
+  decayed_dormant: number;
+  /** Memories moved to archived this pass. */
+  decayed_archived: number;
+  /** Memories expired by decay this pass. */
+  decayed_expired: number;
+  /** Memories promoted back up (reinforced) this pass. */
+  reactivated: number;
   duration_ms: number;
 }
 
@@ -40,6 +49,9 @@ export async function dream(store: MemoryStore, graph: GraphStore, opts: DreamOp
 
   const nrem = await runNREM(store, graph, memories);
   const rem = runREM(store, graph, memories, opts.cwd);
+  // Decay/lifecycle over the same scope (active/dormant/archived). Runs after
+  // dedup/linking so merges register as recent activity first.
+  const decay = runDecay(store, { scope: opts.scope, cwd: queryCwd });
 
   const duration_ms = Date.now() - startMs;
 
@@ -52,7 +64,7 @@ export async function dream(store: MemoryStore, graph: GraphStore, opts: DreamOp
     opts.scope ?? 'all',
     new Date(Date.now() - duration_ms).toISOString(),
     new Date().toISOString(),
-    JSON.stringify({ ...nrem, ...rem, duration_ms }),
+    JSON.stringify({ ...nrem, ...rem, ...decay, duration_ms }),
   );
 
   return {
@@ -61,6 +73,10 @@ export async function dream(store: MemoryStore, graph: GraphStore, opts: DreamOp
     linked: rem.linked,
     promoted: rem.promoted,
     total_processed: nrem.processed,
+    decayed_dormant: decay.toDormant,
+    decayed_archived: decay.toArchived,
+    decayed_expired: decay.expired,
+    reactivated: decay.reactivated,
     duration_ms,
   };
 }
