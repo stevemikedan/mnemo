@@ -38,7 +38,7 @@ let _config: MnemoConfig | null = null;
 
 export function readConfig(): MnemoConfig {
   if (_config) return _config;
-  const path = join(homedir(), '.mnemo', 'config.json');
+  const path = process.env['MNEMO_CONFIG_PATH'] ?? join(homedir(), '.mnemo', 'config.json');
   if (!existsSync(path)) return (_config = {});
   try {
     _config = JSON.parse(readFileSync(path, 'utf-8'));
@@ -46,4 +46,13 @@ export function readConfig(): MnemoConfig {
   } catch {
     return (_config = {});
   }
+}
+
+/**
+ * Test seam: override the memoized config directly. Pass an object to force a
+ * config (e.g. `{ embeddings: { provider: 'local' } }`), or null to reset so
+ * the next readConfig re-reads from disk. Not for production use.
+ */
+export function __setConfig(cfg: MnemoConfig | null): void {
+  _config = cfg;
 }
