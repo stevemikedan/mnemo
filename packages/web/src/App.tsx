@@ -547,6 +547,36 @@ export default function App() {
     }
   };
 
+  // Clear + recompute all embeddings with the current provider
+  const handleReindex = async () => {
+    setIsDreaming(true);
+    setDreamStatus('Reindexing embeddings...');
+    try {
+      const res = await fetch('/api/reindex-embeddings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        const r = await res.json();
+        setDreamStatus(r.provider === 'none'
+          ? 'No embedding provider configured — set embeddings.provider in ~/.mnemo/config.json and restart.'
+          : `Reindexed with ${r.provider}: cleared ${r.cleared}, encoded ${r.embedded}.`);
+        refresh();
+      } else {
+        setDreamStatus('Reindex failed.');
+      }
+    } catch (err) {
+      console.error('Failed to reindex embeddings', err);
+      setDreamStatus('Error connecting to backend for reindex.');
+    } finally {
+      setTimeout(() => {
+        setIsDreaming(false);
+        setDreamStatus('');
+      }, 6000);
+    }
+  };
+
   // Mouse Handlers for Force-Directed Graph interactions
   const handleSvgMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
     // If not clicking on a node, start canvas panning
@@ -1386,14 +1416,25 @@ export default function App() {
               <div className="dream-info">
                 Memory consolidation runs <strong>NREM</strong> deduplication (merging similar memories) and <strong>REM</strong> association (linking related nodes) to keep memory retrieval fast and contextual.
               </div>
-              <button 
-                className="primary" 
-                onClick={handleDream} 
-                disabled={isDreaming}
-                style={{ padding: '8px 12px', fontSize: '12px' }}
-              >
-                {isDreaming ? 'Consolidating...' : 'Consolidate Now'}
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  className="secondary"
+                  onClick={handleReindex}
+                  disabled={isDreaming}
+                  title="Clear and recompute all embeddings with the current provider"
+                  style={{ padding: '8px 12px', fontSize: '12px' }}
+                >
+                  Reindex embeddings
+                </button>
+                <button
+                  className="primary"
+                  onClick={handleDream}
+                  disabled={isDreaming}
+                  style={{ padding: '8px 12px', fontSize: '12px' }}
+                >
+                  {isDreaming ? 'Consolidating...' : 'Consolidate Now'}
+                </button>
+              </div>
             </div>
           </div>
           )}

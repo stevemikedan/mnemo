@@ -1,5 +1,5 @@
 import type { ViteDevServer } from 'vite';
-import { MemoryStore, GraphStore, dream, searchHybrid, readConfig } from '@mnemo/core';
+import { MemoryStore, GraphStore, dream, searchHybrid, readConfig, reindexEmbeddings } from '@mnemo/core';
 import type { MemoryType, EdgeType, MemoryState } from '@mnemo/core';
 
 /** Drop the vector BLOB before serializing a memory to the client. */
@@ -303,6 +303,13 @@ export function apiPlugin() {
               });
               res.statusCode = 200;
               res.end(JSON.stringify(stats));
+              return;
+            }
+
+            if (path === '/api/reindex-embeddings') {
+              const result = await reindexEmbeddings(store);
+              res.statusCode = 200;
+              res.end(JSON.stringify(result));
               return;
             }
           }

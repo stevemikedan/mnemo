@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { MemoryStore } from '@mnemo/core';
 import type { GraphStore } from '@mnemo/core';
-import { dream, consolidateSession, getDreamLog } from '@mnemo/core';
+import { dream, consolidateSession, getDreamLog, reindexEmbeddings } from '@mnemo/core';
 
 export function registerDreamTools(server: McpServer, store: MemoryStore, graph: GraphStore): void {
   server.registerTool('dream', {
@@ -48,6 +48,17 @@ export function registerDreamTools(server: McpServer, store: MemoryStore, graph:
       lines.push('\nNo memory signals detected. The transcript may not contain explicit preferences, decisions, or corrections.');
     }
     return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+  });
+
+  server.registerTool('reindex_embeddings', {
+    description: 'Clear and recompute ALL embeddings with the currently-configured provider. Use after changing embeddings.provider, or to embed a backlog created before embeddings were enabled. No-op if no provider is configured.',
+    inputSchema: z.object({}),
+  }, async () => {
+    const r = await reindexEmbeddings(store);
+    if (r.provider === 'none') {
+      return { content: [{ type: 'text' as const, text: 'No embedding provider configured — nothing to reindex. Set embeddings.provider in ~/.mnemo/config.json (and restart the server) first.' }] };
+    }
+    return { content: [{ type: 'text' as const, text: `Reindexed embeddings with "${r.provider}": cleared ${r.cleared}, re-encoded ${r.embedded}.` }] };
   });
 
   server.registerTool('get_dream_log', {

@@ -55,6 +55,32 @@ export async function encodeForDream(store: MemoryStore, memories: Memory[]): Pr
   return embedMemories(store, memories);
 }
 
+export interface ReindexResult {
+  provider: string;
+  /** Vectors cleared before re-encoding. */
+  cleared: number;
+  /** Vectors written by the re-encode. */
+  embedded: number;
+}
+
+/**
+ * Clear every stored embedding and recompute from scratch with the currently
+ * configured provider. Use after switching providers (so no stale vectors from
+ * the old space linger) or to backfill memories created before embeddings were
+ * enabled. No-op — and importantly, does NOT clear — when no provider is set,
+ * so a misconfigured call can't wipe your vectors.
+ */
+export async function reindexEmbeddings(store: MemoryStore): Promise<ReindexResult> {
+  const provider = readConfig().embeddings?.provider ?? 'none';
+  if (!isEmbeddingConfigured()) {
+    return { provider: 'none', cleared: 0, embedded: 0 };
+  }
+  const cleared = store.db.prepare('UPDATE memories SET embedding = NULL WHERE embedding IS NOT NULL').run().changes;
+  const memories = store.query({ states: ['active', 'dormant', 'archived'] });
+  const embedded = await encodeForDream(store, memories);
+  return { provider, cleared, embedded };
+}
+
 // --- Built-in 'local' provider: dependency-free feature-hashing embedder ---
 
 const LOCAL_DIM = 256;
