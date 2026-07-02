@@ -1,0 +1,174 @@
+:root {
+  --bg-darker: #0b0c10;
+  --bg-dark: #12131a;
+  --bg-card: #1c1d26;
+  --bg-input: #232530;
+  --border: #2e303f;
+  --border-focus: #4e526e;
+  --text-muted: #8b92b6;
+  --text-normal: #d5daf5;
+  --text-bright: #ffffff;
+  
+  /* Accent color overrides based on memory types */
+  --color-user: #f59e0b;       /* Amber */
+  --color-feedback: #f43f5e;   /* Rose */
+  --color-project: #0ea5e9;    /* Sky Blue */
+  --color-reference: #10b981;  /* Emerald */
+  --color-episodic: #a855f7;   /* Purple */
+  --color-semantic: #ec4899;   /* Pink */
+  
+  --accent: #6366f1;           /* Indigo */
+  --accent-glow: rgba(99, 102, 241, 0.25);
+  
+  --font-sans: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-dark);
+  color: var(--text-normal);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-darker);
+}
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-darker);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-focus);
+}
+
+/* Animations */
+@keyframes pulseGlow {
+  0% {
+    box-shadow: 0 0 5px var(--glow-color, var(--accent-glow));
+  }
+  50% {
+    box-shadow: 0 0 15px var(--glow-color, var(--accent-glow));
+  }
+  100% {
+    box-shadow: 0 0 5px var(--glow-color, var(--accent-glow));
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+/* Common form styles */
+input, select, textarea {
+  background-color: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-bright);
+  font-family: var(--font-sans);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+button {
+  cursor: pointer;
+  font-family: var(--font-sans);
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+button.primary {
+  background-color: var(--accent);
+  color: var(--text-bright);
+}
+
+button.primary:hover {
+  background-color: #4f46e5;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+}
+
+button.secondary {
+  background-color: var(--bg-card);
+  color: var(--text-normal);
+  border: 1px solid var(--border);
+}
+
+button.secondary:hover {
+  background-color: var(--bg-input);
+  border-color: var(--border-focus);
+}
+
+button.danger {
+  background-color: rgba(244, 63, 94, 0.15);
+  color: var(--color-feedback);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}
+
+button.danger:hover {
+  background-color: var(--color-feedback);
+  color: var(--text-bright);
+  box-shadow: 0 0 10px rgba(244, 63, 94, 0.4);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Badges for memory types */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge.user { background: rgba(245, 158, 11, 0.15); color: var(--color-user); border: 1px solid rgba(245, 158, 11, 0.3); }
+.badge.feedback { background: rgba(244, 63, 94, 0.15); color: var(--color-feedback); border: 1px solid rgba(244, 63, 94, 0.3); }
+.badge.project { background: rgba(14, 165, 233, 0.15); color: var(--color-project); border: 1px solid rgba(14, 165, 233, 0.3); }
+.badge.reference { background: rgba(16, 185, 129, 0.15); color: var(--color-reference); border: 1px solid rgba(16, 185, 129, 0.3); }
+.badge.episodic { background: rgba(168, 85, 247, 0.15); color: var(--color-episodic); border: 1px solid rgba(168, 85, 247, 0.3); }
+.badge.semantic { background: rgba(236, 72, 153, 0.15); color: var(--color-semantic); border: 1px solid rgba(236, 72, 153, 0.3); }
+.badge.global { background: rgba(99, 102, 241, 0.15); color: var(--accent); border: 1px solid rgba(99, 102, 241, 0.3); }
+.badge.project-scope { background: rgba(139, 146, 182, 0.1); color: var(--text-muted); border: 1px solid rgba(139, 146, 182, 0.2); }
