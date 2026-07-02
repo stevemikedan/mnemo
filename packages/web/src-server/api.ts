@@ -1,6 +1,12 @@
 import type { ViteDevServer } from 'vite';
-import { MemoryStore, GraphStore, dream, BM25Index } from '@mnemo/core';
+import { MemoryStore, GraphStore, dream, searchHybrid, readConfig } from '@mnemo/core';
 import type { MemoryType, EdgeType, MemoryState } from '@mnemo/core';
+
+/** Drop the vector BLOB before serializing a memory to the client. */
+function stripEmb(m: any): any {
+  const { embedding, ...rest } = m;
+  return rest;
+}
 
 // Helper to parse JSON body from Node.js IncomingMessage
 function parseBody(req: any): Promise<any> {
@@ -54,11 +60,13 @@ export function apiPlugin() {
           const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
           const path = url.pathname;
 
-          // GET /api/status - Get database statistics
+          // GET /api/status - Get database statistics + embedding status
           if (req.method === 'GET' && path === '/api/status') {
             const status = store.getStatus();
+            const provider = readConfig().embeddings?.provider ?? 'none';
+            const encoded = (store.db.prepare('SELECT COUNT(*) n FROM memories WHERE embedding IS NOT NULL').get() as { n: number }).n;
             res.statusCode = 200;
-            res.end(JSON.stringify(status));
+            res.end(JSON.stringify({ ...status, embeddings: { provider, encoded } }));
             return;
           }
 
@@ -112,9 +120,10 @@ export function apiPlugin() {
             sql += ` ORDER BY importance DESC, created_at DESC`;
 
             const rows = store.db.prepare(sql).all(...queryParams) as any[];
+            // Keep the embedding BLOB here for hybrid ranking; strip it only
+            // when serializing to the client (via stripEmb).
             let parsed = rows.map(r => ({
               ...r,
-              embedding: undefined, // never ship the vector BLOB to the client
               tags: JSON.parse(r.tags),
               metadata: JSON.parse(r.metadata)
             }));
@@ -124,17 +133,9 @@ export function apiPlugin() {
             }
 
             if (query) {
-              // Search within the current scope selection using BM25
-              const index = new BM25Index();
-              index.build(parsed);
-
-              let results = index.search(query, 50);
-              results = results.map(r => ({
-                ...r,
-                score: r.score * (0.5 + r.memory.importance * 0.5),
-              }));
-
-              const top = results.slice(0, limit || 20);
+              // Hybrid search (BM25 + vector cosine) over the scoped candidates.
+              // Falls back to pure BM25 when no embedding provider is configured.
+              const top = await searchHybrid(parsed, query, limit || 20);
 
               // Expand graph neighbors
               const formattedResults = await Promise.all(top.map(async r => {
@@ -142,8 +143,9 @@ export function apiPlugin() {
                 const related = neighbors
                   .map(n => store.get(n.id))
                   .filter((m): m is any => m != null)
-                  .slice(0, 3);
-                return { memory: r.memory, score: r.score, related };
+                  .slice(0, 3)
+                  .map(stripEmb);
+                return { memory: stripEmb(r.memory), score: r.score, related };
               }));
 
               res.statusCode = 200;
@@ -153,7 +155,7 @@ export function apiPlugin() {
                 parsed = parsed.slice(0, limit);
               }
               res.statusCode = 200;
-              res.end(JSON.stringify(parsed));
+              res.end(JSON.stringify(parsed.map(stripEmb)));
             }
             return;
           }

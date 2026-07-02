@@ -335,6 +335,153 @@
   color: var(--text-bright);
 }
 
+/* Help / guide overlay */
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.help-modal {
+  background-color: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 640px;
+  max-height: 84vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.help-header h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+
+.help-body {
+  padding: 16px 20px 22px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-normal);
+}
+
+.help-body h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-bright);
+  margin: 16px 0 6px;
+}
+
+.help-body p {
+  margin: 6px 0;
+}
+
+.help-body ul {
+  margin: 6px 0;
+  padding-left: 18px;
+}
+
+.help-body li {
+  margin: 3px 0;
+}
+
+.help-body em {
+  color: var(--text-bright);
+  font-style: normal;
+  font-weight: 500;
+}
+
+/* Strength / confidence bar (detail panel) */
+.strength-bar {
+  height: 8px;
+  border-radius: 4px;
+  background-color: var(--bg-input);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.strength-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--color-feedback), var(--color-project), var(--accent));
+  transition: width 0.25s ease;
+}
+
+/* Graph legend */
+.graph-legend {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  z-index: 10;
+  background-color: color-mix(in srgb, var(--bg-card) 88%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 220px;
+  pointer-events: none;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-muted);
+}
+
+.legend-dashed {
+  border-style: dashed;
+}
+
+.legend-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 3px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border);
+}
+
+.legend-type {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.legend-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
 .graph-overlay-status {
   position: absolute;
   top: 20px;

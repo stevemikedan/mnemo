@@ -11,6 +11,8 @@ interface Memory {
   confidence: number;
   access_count: number;
   created_at: string;
+  last_accessed: string | null;
+  last_consolidated: string | null;
   tags: string[];
   source: string;
 }
@@ -39,6 +41,13 @@ interface SimNode extends Memory {
   vy: number;
 }
 
+/** Format an ISO timestamp for display, or 'never' when null. */
+function fmtDate(d: string | null | undefined): string {
+  if (!d) return 'never';
+  const parsed = new Date(d);
+  return isNaN(parsed.getTime()) ? 'never' : parsed.toLocaleString();
+}
+
 export default function App() {
   const [nodes, setNodes] = useState<Memory[]>([]);        // filtered list (left panel)
   const [graphNodes, setGraphNodes] = useState<Memory[]>([]); // full graph (canvas + lookups)
@@ -62,6 +71,9 @@ export default function App() {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [consoleCollapsed, setConsoleCollapsed] = useState(false);
+
+  // In-app help / guide
+  const [showHelp, setShowHelp] = useState(false);
 
   // Memory creation form state
   const [newContent, setNewContent] = useState('');
@@ -700,9 +712,20 @@ export default function App() {
           >
             User: <strong>{stats.byType?.user || 0}</strong>
           </div>
+          <div
+            className="stat-item pointer"
+            title="Embedding provider and how many memories are encoded. Click for help."
+            style={{ borderLeft: '3px solid var(--accent)' }}
+            onClick={() => setShowHelp(true)}
+          >
+            {stats.embeddings?.provider && stats.embeddings.provider !== 'none'
+              ? <>Embeddings: <strong>{stats.embeddings.provider}</strong> · {stats.embeddings.encoded || 0}/{stats.total || 0}</>
+              : <>Embeddings: <strong>off</strong></>}
+          </div>
         </div>
 
         <div className="header-actions">
+          <button className="secondary" title="What am I looking at?" onClick={() => setShowHelp(true)} style={{ width: '34px', padding: 0 }}>?</button>
           {isDreaming && (
             <div className="dream-status-anim">
               <div className="spinner"></div>
@@ -941,6 +964,18 @@ export default function App() {
             <button className="graph-btn" onClick={() => { setZoom(1.0); setPan({ x: 0, y: 0 }); }}>⟲</button>
           </div>
 
+          {/* Legend: how to read the graph */}
+          <div className="graph-legend">
+            <div className="legend-row"><span className="legend-dot" style={{ width: 6, height: 6 }}></span><span className="legend-dot" style={{ width: 12, height: 12 }}></span> size = importance</div>
+            <div className="legend-row"><span className="legend-dot" style={{ opacity: 1 }}></span><span className="legend-dot" style={{ opacity: 0.4 }}></span> opacity = confidence / freshness</div>
+            <div className="legend-row"><span className="legend-dot legend-dashed"></span> dashed = archived / expired</div>
+            <div className="legend-types">
+              {(['project', 'user', 'feedback', 'reference', 'episodic', 'semantic'] as const).map(t => (
+                <span key={t} className="legend-type"><span className="legend-swatch" style={{ background: `var(--color-${t})` }}></span>{t}</span>
+              ))}
+            </div>
+          </div>
+
           <svg
             ref={svgRef}
             className="graph-viewport"
@@ -984,22 +1019,31 @@ export default function App() {
                 );
               })}
 
-              {/* NODES RENDER */}
+              {/* NODES RENDER — size ∝ importance, opacity ∝ confidence × state */}
               {simNodes.map((node) => {
                 const isSelected = selectedId === node.id;
                 const isSearchResult = searchQuery && node.content.toLowerCase().includes(searchQuery.toLowerCase());
-                
+
+                const radius = 6 + (node.importance ?? 0.5) * 8; // 6–14 by importance
+                const conf = typeof node.confidence === 'number' ? node.confidence : 1;
+                const stateFactor = node.state === 'expired' ? 0.18
+                  : node.state === 'archived' ? 0.4
+                  : node.state === 'dormant' ? 0.7 : 1;
+                const groupOpacity = isSelected ? 1 : Math.max(0.2, conf) * stateFactor;
+                const faded = node.state === 'archived' || node.state === 'expired';
+
                 return (
                   <g
                     key={node.id}
                     className="node-group"
                     transform={`translate(${node.x}, ${node.y})`}
+                    opacity={groupOpacity}
                     onMouseDown={(e) => handleNodeMouseDown(e, node)}
                   >
                     {/* Ring glow for selected / search results */}
                     {(isSelected || isSearchResult) && (
                       <circle
-                        r={16}
+                        r={radius + 6}
                         fill="none"
                         stroke={isSearchResult ? 'var(--color-user)' : 'var(--accent)'}
                         strokeWidth="1.5"
@@ -1009,21 +1053,22 @@ export default function App() {
                         } as any}
                       />
                     )}
-                    
+
                     {/* Node Core */}
                     <circle
-                      r={10}
+                      r={radius}
                       fill="var(--bg-card)"
                       stroke={`var(--color-${node.type})`}
                       strokeWidth={isSelected ? 3.0 : 1.8}
+                      strokeDasharray={faded ? '2 2' : undefined}
                       className="node-circle"
                     />
-                    
+
                     {/* Tiny visual indicators on nodes */}
-                    <circle r={2} fill={`var(--color-${node.type})`} opacity={0.6} />
+                    <circle r={Math.max(1.5, radius * 0.22)} fill={`var(--color-${node.type})`} opacity={0.6} />
 
                     {/* Node Label (Short content excerpt) */}
-                    <text y={20} className="node-text">
+                    <text y={radius + 10} className="node-text">
                       {node.content.length > 20 ? `${node.content.slice(0, 18)}...` : node.content}
                     </text>
                   </g>
@@ -1153,9 +1198,26 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="detail-section" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                {/* STRENGTH / CONFIDENCE — set by the decay pass, read-only */}
+                <div className="detail-section">
+                  <label className="detail-label">Strength · <span style={{ textTransform: 'capitalize' }}>{selectedMemory.state}</span></label>
+                  <div className="strength-bar" title={`confidence ${(selectedMemory.confidence ?? 0).toFixed(2)}`}>
+                    <div
+                      className="strength-fill"
+                      style={{ width: `${Math.round(Math.max(0, Math.min(1, selectedMemory.confidence ?? 0)) * 100)}%` }}
+                    ></div>
+                  </div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '3px' }}>
+                    confidence {(selectedMemory.confidence ?? 0).toFixed(2)} — fades over time, rises when recalled
+                  </div>
+                </div>
+
+                <div className="detail-section" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 8px', fontSize: '11px', color: 'var(--text-muted)' }}>
                   <div>Source: <strong>{selectedMemory.source}</strong></div>
                   <div>Access count: <strong>{selectedMemory.access_count}</strong></div>
+                  <div>Created: <strong>{fmtDate(selectedMemory.created_at)}</strong></div>
+                  <div>Last recalled: <strong>{fmtDate(selectedMemory.last_accessed)}</strong></div>
+                  <div style={{ gridColumn: '1 / -1' }}>Last consolidated: <strong>{fmtDate(selectedMemory.last_consolidated)}</strong></div>
                 </div>
 
                 <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '8px 0' }} />
@@ -1337,6 +1399,47 @@ export default function App() {
           )}
         </footer>
       </main>
+
+      {/* HELP / GUIDE OVERLAY */}
+      {showHelp && (
+        <div className="help-overlay" onClick={() => setShowHelp(false)}>
+          <div className="help-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="help-header">
+              <h2>What am I looking at?</h2>
+              <button className="collapse-btn" aria-label="Close help" onClick={() => setShowHelp(false)}>×</button>
+            </div>
+            <div className="help-body">
+              <p>mnemo is a long-term memory store for AI agents. Each <em>memory</em> is one fact, scoped to a project (or global), and connected to related memories in a graph.</p>
+
+              <h3>The three panels</h3>
+              <ul>
+                <li><strong>Memories (left)</strong> — search and filter the list. Pick a <strong>Scope</strong> to focus on one project, filter by <strong>Type</strong> or <strong>State</strong>, or switch to <strong>+ Remember</strong> to add a memory.</li>
+                <li><strong>Graph (center)</strong> — a live map of the selected scope. Drag nodes, scroll to zoom, click a node to inspect it.</li>
+                <li><strong>Memory Context (right)</strong> — details of the selected memory. Edit content, type, state, tags, and importance; link it to other memories; or forget/delete it.</li>
+              </ul>
+              <p style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Any panel can be collapsed with its ‹ › / ▾ button to give the graph more room.</p>
+
+              <h3>Reading the graph</h3>
+              <ul>
+                <li><strong>Size</strong> = importance (bigger = more important).</li>
+                <li><strong>Opacity</strong> = confidence / freshness. Faded nodes are fading from memory.</li>
+                <li><strong>Dashed outline</strong> = archived or expired (old, rarely used).</li>
+                <li><strong>Color</strong> = type (project, user, feedback, reference, episodic, semantic).</li>
+                <li><strong>Lines</strong> = relationships between memories.</li>
+              </ul>
+
+              <h3>States &amp; decay (the "biological" part)</h3>
+              <p>Memories have a <strong>strength</strong> (confidence) that decays over time and rises each time they're recalled — like spaced repetition. As strength falls they move <strong>active → dormant → archived → expired</strong>. Important memories resist decay; recalling a memory revives it. This maintenance happens during <strong>Consolidate (Dream)</strong>.</p>
+
+              <h3>Consolidate (Dream)</h3>
+              <p>Running a dream does the housekeeping: merges near-duplicates (NREM), links related memories (REM), applies decay, and — if configured — computes embeddings. Run it after adding a batch of memories. The bottom console shows what each run did.</p>
+
+              <h3>Search &amp; embeddings</h3>
+              <p>Search uses <strong>BM25</strong> keyword matching, blended with <strong>semantic vector</strong> search when an embedding provider is configured (the chip in the header shows the provider and how many memories are encoded). With embeddings on, search finds memories by meaning, not just exact words. Run a dream to encode new memories.</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
