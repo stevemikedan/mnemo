@@ -10,12 +10,12 @@ export interface MnemoConfig {
     baseUrl?: string;
   };
   embeddings?: {
-    /** 'none' (default), 'local' (built-in hashing embedder), 'openai' (OpenAI-compatible /embeddings), or 'ollama'. */
+    /** 'none' (default), 'local' (built-in hashing), 'astermind' (on-device TF-IDF), 'openai', or 'ollama'. */
     provider?: string;
     model?: string;
     baseUrl?: string;
     apiKey?: string;
-    /** Vector size for the built-in 'local' provider. Default 256. */
+    /** Vector size: dimension for 'local' (default 256); max vocabulary for 'astermind' (default 1024). */
     dimensions?: number;
   };
   decay?: {

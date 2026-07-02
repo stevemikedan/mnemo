@@ -17,6 +17,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@astermind/astermind-elm':
+        specifier: ^2.1.1
+        version: 2.1.1
       better-sqlite3:
         specifier: ^11.0.0
         version: 11.10.0
@@ -84,6 +87,9 @@ importers:
         version: 8.1.3(@types/node@24.13.2)
 
 packages:
+
+  '@astermind/astermind-elm@2.1.1':
+    resolution: {integrity: sha512-kMNoc4QhAthaz5RKNLMfC+ibHnxBLsnNyQ5x62gGUphkdR1jvKJVlFjt4gri49zzjS7dRjNUmIFS6ztBPVcdSw==}
 
   '@emnapi/core@1.11.1':
     resolution: {integrity: sha512-RSvbQmHzdKzNsLYa/wHrbc3KN4sYLKAdPZxqiM2HATqv/SBk2/ENSHpvXGaLOMcsAyz0poEGqkmmKYG3OWiJEQ==}
@@ -1068,6 +1074,8 @@ packages:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
 snapshots:
+
+  '@astermind/astermind-elm@2.1.1': {}
 
   '@emnapi/core@1.11.1':
     dependencies:

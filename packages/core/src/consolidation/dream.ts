@@ -5,7 +5,7 @@ import { extractSignals } from './session.js';
 import { runNREM } from './nrem.js';
 import { runREM } from './rem.js';
 import { runDecay } from './decay.js';
-import { embedMemories } from '../rag/embedding.js';
+import { encodeForDream } from '../rag/embedding.js';
 
 export interface DreamOptions {
   /** Exact scope to consolidate, e.g. 'project:/path/to/repo' or 'global'. Defaults to all active memories. */
@@ -48,9 +48,9 @@ export async function dream(store: MemoryStore, graph: GraphStore, opts: DreamOp
     memories = memories.filter(m => m.scope === opts.scope || m.scope === 'global');
   }
 
-  // Encode: compute embeddings for any memories that lack them (no-op unless an
-  // embedding provider is configured). Done first so NREM/recall can use them.
-  await embedMemories(store, memories);
+  // Encode: compute embeddings (no-op unless an embedding provider is
+  // configured). Done first so NREM/recall can use them.
+  await encodeForDream(store, memories);
 
   const nrem = await runNREM(store, graph, memories);
   const rem = runREM(store, graph, memories, opts.cwd);

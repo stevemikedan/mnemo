@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@astermind/astermind-elm": "^2.1.1",
     "better-sqlite3": "^11.0.0",
     "lunr": "^2.3.9",
     "uuid": "^10.0.0"

@@ -1,4 +1,5 @@
 import { readConfig } from '../consolidation/config.js';
+import { astermindEmbed, fitAndEncodeCorpus } from './astermind.js';
 import type { MemoryStore } from '../graph/store.js';
 import type { Memory } from '../graph/schema.js';
 
@@ -31,12 +32,27 @@ export async function embedText(texts: string[]): Promise<number[][] | null> {
 
   try {
     if (provider === 'local') return localEmbed(texts, cfg.dimensions ?? LOCAL_DIM);
+    if (provider === 'astermind') return astermindEmbed(texts);
     if (provider === 'openai') return await openaiEmbed(texts, cfg);
     if (provider === 'ollama') return await ollamaEmbed(texts, cfg);
   } catch {
     return null;
   }
   return null;
+}
+
+/**
+ * Encode memories during consolidation. Most providers embed only the
+ * un-embedded memories (embedMemories); the 'astermind' provider instead
+ * refits its TF-IDF vectorizer on the whole store and re-embeds everything so
+ * all vectors share one vocabulary. No-op when unconfigured.
+ */
+export async function encodeForDream(store: MemoryStore, memories: Memory[]): Promise<number> {
+  const cfg = readConfig().embeddings ?? {};
+  const provider = cfg.provider ?? 'none';
+  if (provider === 'none') return 0;
+  if (provider === 'astermind') return fitAndEncodeCorpus(store, cfg.dimensions);
+  return embedMemories(store, memories);
 }
 
 // --- Built-in 'local' provider: dependency-free feature-hashing embedder ---
