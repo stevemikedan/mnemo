@@ -30,15 +30,12 @@ function parseBody(req: any): Promise<any> {
   });
 }
 
-export function apiPlugin() {
-  return {
-    name: 'mnemo-api',
-    configureServer(server: ViteDevServer) {
-      // Connect to SQLite store
-      const store = new MemoryStore(process.env.MNEMO_DB_PATH);
-      const graph = new GraphStore(store.db);
-
-      server.middlewares.use(async (req, res, next) => {
+/**
+ * Build the /api/* request handler over a given store. Exported so it can be
+ * driven directly in tests (and reused by the Vite plugin below).
+ */
+export function createApiHandler(store: MemoryStore, graph: GraphStore) {
+  return async (req: any, res: any, next: () => void) => {
         // Only handle requests targeting /api/*
         if (!req.url || !req.url.startsWith('/api/')) {
           return next();
@@ -321,7 +318,16 @@ export function apiPlugin() {
           res.statusCode = 500;
           res.end(JSON.stringify({ error: err.message || 'Internal Server Error' }));
         }
-      });
-    }
+  };
+}
+
+export function apiPlugin() {
+  return {
+    name: 'mnemo-api',
+    configureServer(server: ViteDevServer) {
+      const store = new MemoryStore(process.env.MNEMO_DB_PATH);
+      const graph = new GraphStore(store.db);
+      server.middlewares.use(createApiHandler(store, graph));
+    },
   };
 }
