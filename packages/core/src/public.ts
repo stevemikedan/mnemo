@@ -9,6 +9,7 @@ export { extractSignals } from './consolidation/session.js';
 export { runNREM } from './consolidation/nrem.js';
 export { runREM } from './consolidation/rem.js';
 export { runDecay, retentionOf } from './consolidation/decay.js';
+export { runReconcile } from './consolidation/reconcile.js';
 export { dream, consolidateSession, getDreamLog } from './consolidation/dream.js';
 export type {
   Memory,
@@ -24,4 +25,5 @@ export type { ExtractedSignal } from './consolidation/session.js';
 export type { NREMStats } from './consolidation/nrem.js';
 export type { REMStats } from './consolidation/rem.js';
 export type { DecayStats, DecayOptions } from './consolidation/decay.js';
+export type { ReconcileStats, Verdict, Adjudicator } from './consolidation/reconcile.js';
 export type { DreamOptions, DreamStats, ConsolidateSessionResult } from './consolidation/dream.js';

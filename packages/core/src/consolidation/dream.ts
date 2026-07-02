@@ -5,6 +5,7 @@ import { extractSignals } from './session.js';
 import { runNREM } from './nrem.js';
 import { runREM } from './rem.js';
 import { runDecay } from './decay.js';
+import { runReconcile } from './reconcile.js';
 import { encodeForDream } from '../rag/embedding.js';
 
 export interface DreamOptions {
@@ -28,6 +29,10 @@ export interface DreamStats {
   decayed_expired: number;
   /** Memories promoted back up (reinforced) this pass. */
   reactivated: number;
+  /** Newer-supersedes-older relationships found this pass. */
+  superseded: number;
+  /** Genuine contradictions found this pass. */
+  contradicted: number;
   duration_ms: number;
 }
 
@@ -58,6 +63,15 @@ export async function dream(store: MemoryStore, graph: GraphStore, opts: DreamOp
   // dedup/linking so merges register as recent activity first.
   const decay = runDecay(store, { scope: opts.scope, cwd: queryCwd });
 
+  // Reconcile: detect newer-supersedes-older and genuine contradictions among
+  // same-scope memories. Re-query fresh (post NREM/decay) rather than reuse the
+  // stale snapshot. LLM-gated — a no-op without a consolidation provider.
+  let reconcileSet = store.query({ states: ['active', 'dormant'], cwd: queryCwd });
+  if (opts.scope && opts.scope !== 'global') {
+    reconcileSet = reconcileSet.filter(m => m.scope === opts.scope || m.scope === 'global');
+  }
+  const reconcile = await runReconcile(store, graph, reconcileSet);
+
   const duration_ms = Date.now() - startMs;
 
   // Write to consolidation_log
@@ -69,7 +83,7 @@ export async function dream(store: MemoryStore, graph: GraphStore, opts: DreamOp
     opts.scope ?? 'all',
     new Date(Date.now() - duration_ms).toISOString(),
     new Date().toISOString(),
-    JSON.stringify({ ...nrem, ...rem, ...decay, duration_ms }),
+    JSON.stringify({ ...nrem, ...rem, ...decay, ...reconcile, duration_ms }),
   );
 
   return {
@@ -82,6 +96,8 @@ export async function dream(store: MemoryStore, graph: GraphStore, opts: DreamOp
     decayed_archived: decay.toArchived,
     decayed_expired: decay.expired,
     reactivated: decay.reactivated,
+    superseded: reconcile.supersessions,
+    contradicted: reconcile.contradictions,
     duration_ms,
   };
 }

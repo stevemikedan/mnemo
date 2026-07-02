@@ -22,6 +22,8 @@ export function registerDreamTools(server: McpServer, store: MemoryStore, graph:
       `- Promoted (TiMem): ${stats.promoted}`,
       `- Decayed → dormant/archived/expired: ${stats.decayed_dormant}/${stats.decayed_archived}/${stats.decayed_expired}`,
       `- Reactivated (reinforced): ${stats.reactivated}`,
+      `- Superseded (newer overrides older): ${stats.superseded}`,
+      `- Contradictions flagged: ${stats.contradicted}`,
       `- Duration: ${stats.duration_ms}ms`,
     ];
     return { content: [{ type: 'text' as const, text: lines.join('\n') }] };

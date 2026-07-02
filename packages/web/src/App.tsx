@@ -531,7 +531,7 @@ export default function App() {
 
       if (res.ok) {
         const stats = await res.json();
-        setDreamStatus(`Dream finished: Merged ${stats.merged}, Linked ${stats.linked}, Decayed ${(stats.decayed_dormant || 0) + (stats.decayed_archived || 0) + (stats.decayed_expired || 0)}, Reactivated ${stats.reactivated || 0}`);
+        setDreamStatus(`Dream finished: Merged ${stats.merged}, Linked ${stats.linked}, Decayed ${(stats.decayed_dormant || 0) + (stats.decayed_archived || 0) + (stats.decayed_expired || 0)}, Reactivated ${stats.reactivated || 0}, Superseded ${stats.superseded || 0}, Contradictions ${stats.contradicted || 0}`);
         refresh();
       } else {
         setDreamStatus('Memory consolidation failed.');
@@ -1375,7 +1375,7 @@ export default function App() {
                       Phase: <strong>{log.phase}</strong> | Scope: <strong>{log.scope}</strong>
                     </div>
                     <div className="log-entry-stats">
-                      Stats: processed={log.stats.total_processed || 0}, merged={log.stats.merged || 0}, linked={log.stats.linked || 0}, dormant={log.stats.toDormant || 0}, archived={log.stats.toArchived || 0}, expired={log.stats.expired || 0}, reactivated={log.stats.reactivated || 0}, duration={log.stats.duration_ms || 0}ms
+                      Stats: processed={log.stats.total_processed || 0}, merged={log.stats.merged || 0}, linked={log.stats.linked || 0}, dormant={log.stats.toDormant || 0}, archived={log.stats.toArchived || 0}, expired={log.stats.expired || 0}, reactivated={log.stats.reactivated || 0}, superseded={log.stats.supersessions || 0}, contradicted={log.stats.contradictions || 0}, duration={log.stats.duration_ms || 0}ms
                     </div>
                   </div>
                 ))
@@ -1432,7 +1432,7 @@ export default function App() {
               <p>Memories have a <strong>strength</strong> (confidence) that decays over time and rises each time they're recalled — like spaced repetition. As strength falls they move <strong>active → dormant → archived → expired</strong>. Important memories resist decay; recalling a memory revives it. This maintenance happens during <strong>Consolidate (Dream)</strong>.</p>
 
               <h3>Consolidate (Dream)</h3>
-              <p>Running a dream does the housekeeping: merges near-duplicates (NREM), links related memories (REM), applies decay, and — if configured — computes embeddings. Run it after adding a batch of memories. The bottom console shows what each run did.</p>
+              <p>Running a dream does the housekeeping: merges near-duplicates (NREM), links related memories (REM), applies decay, reconciles conflicts (marking when a newer memory <strong>supersedes</strong> an older one, or flagging genuine <strong>contradictions</strong>), and — if configured — computes embeddings. Reconciliation needs a consolidation LLM (e.g. Anthropic); the rest works without one. Run a dream after adding a batch of memories. The bottom console shows what each run did.</p>
 
               <h3>Search &amp; embeddings</h3>
               <p>Search uses <strong>BM25</strong> keyword matching, blended with <strong>semantic vector</strong> search when an embedding provider is configured (the chip in the header shows the provider and how many memories are encoded). With embeddings on, search finds memories by meaning, not just exact words. Run a dream to encode new memories.</p>
