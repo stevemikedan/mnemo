@@ -7,11 +7,12 @@ import type { Memory } from '../graph/schema.js';
  * degradation — when no provider is configured (the default), embedText returns
  * null and retrieval falls back to pure BM25 with zero behavioral change.
  *
- * Built-in providers are HTTP-only (no bundled dependency):
+ * Built-in providers (no bundled dependency):
+ *  - 'local':  in-process feature-hashing embedder — no model download, no key
  *  - 'openai': any OpenAI-compatible POST {baseUrl}/embeddings endpoint
  *  - 'ollama': a local Ollama server's POST {baseUrl}/api/embed
- * A local in-process provider (e.g. AsterMind-ELM) can be added later without
- * touching callers.
+ * Further local providers (e.g. AsterMind-ELM) can be added without touching
+ * callers.
  */
 
 const EMBED_TIMEOUT_MS = 10_000;
@@ -29,12 +30,64 @@ export async function embedText(texts: string[]): Promise<number[][] | null> {
   if (provider === 'none') return null;
 
   try {
+    if (provider === 'local') return localEmbed(texts, cfg.dimensions ?? LOCAL_DIM);
     if (provider === 'openai') return await openaiEmbed(texts, cfg);
     if (provider === 'ollama') return await ollamaEmbed(texts, cfg);
   } catch {
     return null;
   }
   return null;
+}
+
+// --- Built-in 'local' provider: dependency-free feature-hashing embedder ---
+
+const LOCAL_DIM = 256;
+
+/** FNV-1a 32-bit hash of a string. */
+function fnv1a(str: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+/**
+ * On-device, deterministic embedding via signed feature hashing over unigrams
+ * and bigrams with TF weighting, L2-normalized. No model download, no training,
+ * no dependency. Captures lexical/fuzzy overlap (shared terms and phrases) — a
+ * step up from BM25 for paraphrase-ish matching, though not transformer-grade.
+ */
+function localEmbed(texts: string[], dim: number): number[][] {
+  // Crude stemmer: fold common plural/gerund endings so 'containers'/'container'
+  // and 'deploying'/'deploy' collide. Not linguistically correct, just enough to
+  // recover the most frequent morphological variants.
+  const stem = (t: string): string => {
+    if (t.length > 5 && t.endsWith('ing')) return t.slice(0, -3);
+    if (t.length > 4 && t.endsWith('es')) return t.slice(0, -2);
+    if (t.length > 3 && t.endsWith('s') && !t.endsWith('ss')) return t.slice(0, -1);
+    return t;
+  };
+  return texts.map(text => {
+    const vec = new Float64Array(dim);
+    const tokens = (text.toLowerCase().match(/[a-z0-9]{2,}/g) ?? []).map(stem);
+    const add = (term: string) => {
+      const h = fnv1a(term);
+      const sign = (fnv1a('sign:' + term) & 1) === 0 ? 1 : -1;
+      vec[h % dim] += sign;
+    };
+    for (let i = 0; i < tokens.length; i++) {
+      add(tokens[i]);
+      if (i + 1 < tokens.length) add(tokens[i] + ' ' + tokens[i + 1]); // bigram
+    }
+    let mag = 0;
+    for (let i = 0; i < dim; i++) mag += vec[i] * vec[i];
+    mag = Math.sqrt(mag);
+    const out = new Array<number>(dim);
+    for (let i = 0; i < dim; i++) out[i] = mag > 0 ? vec[i] / mag : 0;
+    return out;
+  });
 }
 
 async function withTimeout(url: string, init: RequestInit): Promise<Response> {

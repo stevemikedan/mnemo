@@ -10,11 +10,13 @@ export interface MnemoConfig {
     baseUrl?: string;
   };
   embeddings?: {
-    /** 'none' (default), 'openai' (OpenAI-compatible /embeddings), or 'ollama'. */
+    /** 'none' (default), 'local' (built-in hashing embedder), 'openai' (OpenAI-compatible /embeddings), or 'ollama'. */
     provider?: string;
     model?: string;
     baseUrl?: string;
     apiKey?: string;
+    /** Vector size for the built-in 'local' provider. Default 256. */
+    dimensions?: number;
   };
   decay?: {
     /** Master switch for the decay/lifecycle pass. Default true. */
