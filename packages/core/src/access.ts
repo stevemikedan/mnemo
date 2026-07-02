@@ -15,7 +15,11 @@ export function isScopeVisible(memoryScope: string, cwd: string): boolean {
   if (memoryScope === 'global') return true;
   if (memoryScope.startsWith('project:')) {
     const scopePath = memoryScope.slice(8);
-    return cwd.startsWith(scopePath);
+    // Exact match, or cwd is nested under scopePath. Require a path separator
+    // boundary so 'project:/foo' does not leak into a sibling like '/foobar'.
+    return cwd === scopePath
+      || cwd.startsWith(scopePath + '/')
+      || cwd.startsWith(scopePath + '\\');
   }
   if (memoryScope.startsWith('session:')) {
     // Session memories only visible if explicitly queried

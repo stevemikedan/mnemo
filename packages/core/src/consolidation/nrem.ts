@@ -51,8 +51,12 @@ export async function runNREM(
     if (expired.has(mem.id)) continue;
     stats.processed++;
 
+    // Same scope only: never merge one project's memory into another's (or a
+    // project memory into a global one), which would silently expire data
+    // across project boundaries.
     const hits = index.search(mem.content, 8)
-      .filter(h => h.memory.id !== mem.id && !expired.has(h.memory.id) && h.memory.type === mem.type);
+      .filter(h => h.memory.id !== mem.id && !expired.has(h.memory.id)
+        && h.memory.type === mem.type && h.memory.scope === mem.scope);
 
     // Only adjudicate candidates with meaningful word overlap
     const candidates = hits.filter(h => wordOverlap(mem.content, h.memory.content) > 0.38);

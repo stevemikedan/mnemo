@@ -45,6 +45,11 @@ export function runREM(
       const b = sample[j];
       // Only link same-type memories
       if (a.type !== b.type) continue;
+      // Never link across scopes. Cross-scope edges (project-to-project, or
+      // global-to-project) let recall's neighbor expansion bleed one project's
+      // memories into another's context. Global links only to global; each
+      // project only within itself.
+      if (a.scope !== b.scope) continue;
       const pairKey = [a.id, b.id].sort().join(':');
       if (existingEdgePairs.has(pairKey)) continue;
 

@@ -15,8 +15,8 @@ export function registerReadTools(server: McpServer, store: MemoryStore, graph: 
     description: 'Search memories using BM25 keyword search with scope filtering. Returns ranked results.',
     inputSchema: z.object({
       query: z.string().describe('Search query (BM25 keyword search)'),
-      scope: z.string().optional().describe('Filter to a specific scope (e.g. project:/path/to/repo). Leave empty for global + all project memories.'),
-      cwd: z.string().optional().describe('Current working directory — used for automatic scope resolution'),
+      scope: z.string().optional().describe('Your project scope (e.g. project:/path/to/repo). Returns global memories plus that project\'s. Omit to search across all scopes.'),
+      cwd: z.string().optional().describe('Current working directory (absolute path) — resolves to global + any ancestor project scope. Alternative to passing scope.'),
       types: z.array(z.enum(['user', 'feedback', 'project', 'reference', 'episodic', 'semantic'])).optional(),
       limit: z.number().int().min(1).max(50).optional().default(10),
       include_related: z.boolean().optional().default(false),
@@ -75,7 +75,7 @@ export function registerReadTools(server: McpServer, store: MemoryStore, graph: 
   server.registerTool('list_memories', {
     description: 'List memories with optional filters. No semantic ranking — use recall for search.',
     inputSchema: z.object({
-      scope: z.string().optional(),
+      scope: z.string().optional().describe('Exact scope match, e.g. "global" or "project:/abs/path". Omit to list across all scopes.'),
       types: z.array(z.enum(['user', 'feedback', 'project', 'reference', 'episodic', 'semantic'])).optional(),
       tags: z.array(z.string()).optional(),
       limit: z.number().int().min(1).max(100).optional().default(20),

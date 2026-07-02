@@ -24,10 +24,10 @@ export class GraphStore {
   getNeighbors(memoryId: string, depth = 1): { id: string; type: EdgeType; direction: 'out' | 'in' }[] {
     if (depth < 1) return [];
     const outgoing = this.db.prepare(
-      'SELECT to_id as id, type, "out" as direction FROM memory_edges WHERE from_id = ?'
+      "SELECT to_id as id, type, 'out' as direction FROM memory_edges WHERE from_id = ?"
     ).all(memoryId) as { id: string; type: EdgeType; direction: 'out' }[];
     const incoming = this.db.prepare(
-      'SELECT from_id as id, type, "in" as direction FROM memory_edges WHERE to_id = ?'
+      "SELECT from_id as id, type, 'in' as direction FROM memory_edges WHERE to_id = ?"
     ).all(memoryId) as { id: string; type: EdgeType; direction: 'in' }[];
     return [...outgoing, ...incoming];
   }

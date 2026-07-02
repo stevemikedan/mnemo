@@ -17,7 +17,6 @@ export interface RecallResult {
 
 export class RecallEngine {
   private index = new BM25Index();
-  private lastIndexedCount = 0;
 
   constructor(
     private store: MemoryStore,
@@ -32,11 +31,10 @@ export class RecallEngine {
       tags: opts.tags,
     });
 
-    // Rebuild index if memory count changed
-    if (candidates.length !== this.lastIndexedCount) {
-      this.index.build(candidates);
-      this.lastIndexedCount = candidates.length;
-    }
+    // Rebuild the index on every recall. Keying on candidate count (the prior
+    // approach) reused a stale index whenever a different scope or an edit
+    // yielded the same count, returning wrong results with confident scores.
+    this.index.build(candidates);
 
     const limit = opts.limit ?? 10;
     let results: SearchResult[];
@@ -63,10 +61,14 @@ export class RecallEngine {
       return top.map(r => ({ memory: r.memory, score: r.score }));
     }
 
-    // Graph expand: include 1-hop neighbors for top results
+    // Graph expand: include 1-hop neighbors for top results, but only ones
+    // within the visible scope. A stray cross-scope edge (e.g. from a past
+    // global dream) must not bleed another project's memory into these results.
+    const visibleIds = new Set(candidates.map(c => c.id));
     return Promise.all(top.map(async r => {
       const neighbors = this.graph.getNeighbors(r.memory.id, 1);
       const related = neighbors
+        .filter(n => visibleIds.has(n.id))
         .map(n => this.store.get(n.id))
         .filter((m): m is Memory => m != null)
         .slice(0, 3);

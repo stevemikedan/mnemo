@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
 import { SCHEMA_SQL, type Memory, type MemoryEdge, type MemoryType, type MemoryState, type EdgeType } from './schema.js';
+import { isScopeVisible } from '../access.js';
 import { homedir } from 'os';
 import { mkdirSync } from 'fs';
 import { join } from 'path';
@@ -90,10 +91,12 @@ export class MemoryStore {
     return deserialize(row);
   }
 
-  update(id: string, patch: Partial<Pick<Memory, 'content' | 'state' | 'importance' | 'confidence' | 'tags' | 'metadata'>>): boolean {
+  update(id: string, patch: Partial<Pick<Memory, 'content' | 'type' | 'scope' | 'state' | 'importance' | 'confidence' | 'tags' | 'metadata'>>): boolean {
     const sets: string[] = [];
     const params: Record<string, unknown> = { id };
     if (patch.content !== undefined) { sets.push('content = @content'); params.content = patch.content; }
+    if (patch.type !== undefined) { sets.push('type = @type'); params.type = patch.type; }
+    if (patch.scope !== undefined) { sets.push('scope = @scope'); params.scope = patch.scope; }
     if (patch.state !== undefined) { sets.push('state = @state'); params.state = patch.state; }
     if (patch.importance !== undefined) { sets.push('importance = @importance'); params.importance = patch.importance; }
     if (patch.confidence !== undefined) { sets.push('confidence = @confidence'); params.confidence = patch.confidence; }
@@ -104,21 +107,39 @@ export class MemoryStore {
     return result.changes > 0;
   }
 
-  /** Returns all memories visible from a given CWD + optionally filtered */
+  /**
+   * Query memories, filtered by state, scope, type, tags, and limit.
+   *
+   * Scope handling (mutually exclusive, in priority order):
+   *  - `scope` (and not 'all'): exact scope match, e.g. 'global' or
+   *    'project:/abs/path'. Use this to filter to a single workspace.
+   *  - `cwd`: visibility resolution — returns global memories plus any project
+   *    scope that is an ancestor of the cwd. A 'project:'-prefixed value is
+   *    accepted and normalized. Use this for "what applies from where I am".
+   *  - neither: no scope restriction (all scopes).
+   *
+   * Scope resolution is done in JS (see access.ts) rather than SQL LIKE to
+   * avoid wildcard injection from paths containing '_'/'%' and sibling-prefix
+   * false matches ('project:/foo' vs '/foobar').
+   */
   query(opts: QueryOptions = {}): Memory[] {
-    const cwd = opts.scope ?? opts.cwd ?? 'global';
     const states = opts.states ?? ['active', 'dormant'];
     const stateList = states.map(() => '?').join(',');
 
-    // Scope resolution: return global + any project scope that is a prefix of cwd
     const rows = this.db.prepare(`
       SELECT * FROM memories
       WHERE state IN (${stateList})
-        AND (scope = 'global' OR (scope LIKE 'project:%' AND ? LIKE (SUBSTR(scope, 9) || '%')))
       ORDER BY importance DESC, created_at DESC
-    `).all(...states, cwd) as Record<string, unknown>[];
+    `).all(...states) as Record<string, unknown>[];
 
     let memories = rows.map(deserialize);
+
+    if (opts.scope && opts.scope !== 'all') {
+      memories = memories.filter(m => m.scope === opts.scope);
+    } else if (opts.cwd) {
+      const cwd = opts.cwd.startsWith('project:') ? opts.cwd.slice(8) : opts.cwd;
+      memories = memories.filter(m => isScopeVisible(m.scope, cwd));
+    }
 
     if (opts.types?.length) {
       memories = memories.filter(m => opts.types!.includes(m.type));
