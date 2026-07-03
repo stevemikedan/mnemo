@@ -4,7 +4,8 @@ import { homedir } from 'os';
 
 export interface MnemoConfig {
   consolidation?: {
-    provider?: 'anthropic' | 'openai' | 'ollama' | 'none';
+    /** 'none', 'claude-cli' (reuse the local Claude Code login — no API key), or 'anthropic' (direct API, needs apiKey). */
+    provider?: 'anthropic' | 'claude-cli' | 'openai' | 'ollama' | 'none';
     model?: string;
     apiKey?: string;
     baseUrl?: string;
@@ -55,4 +56,13 @@ export function readConfig(): MnemoConfig {
  */
 export function __setConfig(cfg: MnemoConfig | null): void {
   _config = cfg;
+}
+
+/**
+ * Clear the memoized config so the next readConfig re-reads from disk. Call
+ * after writing config.json at runtime (e.g. from a settings UI) so changes
+ * apply without a process restart.
+ */
+export function reloadConfig(): void {
+  _config = null;
 }

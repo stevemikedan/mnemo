@@ -1,6 +1,7 @@
+import { spawn } from 'child_process';
 import { readConfig } from './config.js';
 
-type Provider = 'anthropic' | 'openai' | 'ollama' | 'none';
+type Provider = 'anthropic' | 'claude-cli' | 'openai' | 'ollama' | 'none';
 
 function resolveProvider(): Provider {
   const config = readConfig();
@@ -19,8 +20,38 @@ function resolveApiKey(): string | null {
 export async function llmComplete(prompt: string, system?: string): Promise<string | null> {
   const provider = resolveProvider();
   if (provider === 'none') return null;
+  if (provider === 'claude-cli') return claudeCliComplete(prompt, system);
   if (provider === 'anthropic') return anthropicComplete(prompt, system);
   return null;
+}
+
+/**
+ * Complete via the local Claude Code CLI in headless mode (`claude -p`),
+ * reusing the user's existing login — no API key required. Returns null on any
+ * failure so callers fall back gracefully.
+ */
+function claudeCliComplete(prompt: string, system: string | undefined): Promise<string | null> {
+  const model = readConfig().consolidation?.model ?? 'haiku';
+  const full = system ? `${system}\n\n${prompt}` : prompt;
+  return new Promise((resolve) => {
+    let out = '';
+    let settled = false;
+    const done = (v: string | null) => { if (!settled) { settled = true; resolve(v); } };
+    try {
+      const child = spawn('claude', ['-p', '--output-format', 'text', '--model', model], {
+        stdio: ['pipe', 'pipe', 'ignore'],
+        shell: true, // resolve claude.cmd on Windows / claude on unix
+      });
+      const timer = setTimeout(() => { child.kill(); done(null); }, 120_000);
+      child.stdout.on('data', (d) => { out += d; });
+      child.on('error', () => { clearTimeout(timer); done(null); });
+      child.on('close', (code) => { clearTimeout(timer); done(code === 0 && out.trim() ? out.trim() : null); });
+      child.stdin.write(full);
+      child.stdin.end();
+    } catch {
+      done(null);
+    }
+  });
 }
 
 async function anthropicComplete(prompt: string, system: string | undefined): Promise<string | null> {
