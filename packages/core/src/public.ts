@@ -5,7 +5,7 @@ export { RecallEngine, searchHybrid, fuseRRF } from './rag/recall.js';
 export { embedText, embedMemories, isEmbeddingConfigured, cosineSim, reindexEmbeddings } from './rag/embedding.js';
 export type { ReindexResult } from './rag/embedding.js';
 export { readConfig } from './consolidation/config.js';
-export { resolveScope, isScopeVisible } from './access.js';
+export { resolveScope, isScopeVisible, normalizeScope } from './access.js';
 export { extractSignals } from './consolidation/session.js';
 export { runNREM } from './consolidation/nrem.js';
 export { runREM } from './consolidation/rem.js';

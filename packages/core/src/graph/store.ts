@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
 import { SCHEMA_SQL, type Memory, type MemoryEdge, type MemoryType, type MemoryState, type EdgeType } from './schema.js';
-import { isScopeVisible } from '../access.js';
+import { isScopeVisible, normalizeScope } from '../access.js';
 import { homedir } from 'os';
 import { mkdirSync } from 'fs';
 import { join } from 'path';
@@ -55,7 +55,7 @@ export class MemoryStore {
       id: uuidv4(),
       content: opts.content,
       type: opts.type ?? 'project',
-      scope: opts.scope ?? 'global',
+      scope: normalizeScope(opts.scope ?? 'global'),
       state: 'active',
       importance: opts.importance ?? 0.5,
       confidence: 1.0,
@@ -111,7 +111,7 @@ export class MemoryStore {
     const params: Record<string, unknown> = { id };
     if (patch.content !== undefined) { sets.push('content = @content'); params.content = patch.content; }
     if (patch.type !== undefined) { sets.push('type = @type'); params.type = patch.type; }
-    if (patch.scope !== undefined) { sets.push('scope = @scope'); params.scope = patch.scope; }
+    if (patch.scope !== undefined) { sets.push('scope = @scope'); params.scope = normalizeScope(patch.scope); }
     if (patch.state !== undefined) { sets.push('state = @state'); params.state = patch.state; }
     if (patch.importance !== undefined) { sets.push('importance = @importance'); params.importance = patch.importance; }
     if (patch.confidence !== undefined) { sets.push('confidence = @confidence'); params.confidence = patch.confidence; }
@@ -161,7 +161,8 @@ export class MemoryStore {
     let memories = rows.map(deserialize);
 
     if (opts.scope && opts.scope !== 'all') {
-      memories = memories.filter(m => m.scope === opts.scope);
+      const target = normalizeScope(opts.scope);
+      memories = memories.filter(m => normalizeScope(m.scope) === target);
     } else if (opts.cwd) {
       const cwd = opts.cwd.startsWith('project:') ? opts.cwd.slice(8) : opts.cwd;
       memories = memories.filter(m => isScopeVisible(m.scope, cwd));

@@ -59,6 +59,17 @@ describe('MemoryStore.query — scope resolution contract', () => {
     expect(contents(store.query({}))).toEqual(['global fact', 'projA fact', 'projB fact', 'sibling fact']);
   });
 
+  it('matches scopes slash-insensitively (Windows backslash cwd finds a forward-slash scope)', () => {
+    const store = new MemoryStore(':memory:');
+    // Stored with backslashes (as some Windows captures do); normalized on write.
+    store.create({ content: 'win note', scope: 'project:C:\\Users\\s\\proj' });
+    // Recall/visibility with the other slash style must still match.
+    expect(contents(store.query({ cwd: 'C:/Users/s/proj' }))).toEqual(['win note']);
+    expect(contents(store.query({ cwd: 'C:\\Users\\s\\proj\\sub' }))).toEqual(['win note']);
+    // Exact-scope filter is slash-insensitive too.
+    expect(contents(store.query({ scope: 'project:C:/Users/s/proj' }))).toEqual(['win note']);
+  });
+
   it('paths containing LIKE wildcards are matched literally, not as patterns', () => {
     const store = new MemoryStore(':memory:');
     store.create({ content: 'underscore proj', scope: 'project:/home/s/my_proj' });
