@@ -19,6 +19,12 @@ export interface MnemoConfig {
     /** Vector size: dimension for 'local' (default 256); max vocabulary for 'astermind' (default 1024). */
     dimensions?: number;
   };
+  ml?: {
+    /** ELM type suggestion on remember(). Off by default. */
+    typeSuggest?: { enabled?: boolean; minConfidence?: number; minMargin?: number };
+    /** Consolidation pre-screener (logging now; gating later). Off by default. */
+    prescreen?: { enabled?: boolean; logging?: boolean };
+  };
   decay?: {
     /** Master switch for the decay/lifecycle pass. Default true. */
     enabled?: boolean;

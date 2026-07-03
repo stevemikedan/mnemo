@@ -102,13 +102,19 @@ export function fuseRRF(candidates: Memory[], bm25: SearchResult[], queryVec: nu
   const bm25Rank = new Map<string, number>();
   bm25.forEach((r, i) => bm25Rank.set(r.memory.id, i));
 
+  // Raw lexical scores and cosine sims — normally discarded, kept here so a
+  // future reranker can learn from them (see SearchResult.bm25/cosine).
+  const bm25Score = new Map<string, number>();
+  bm25.forEach(r => bm25Score.set(r.memory.id, r.score));
+  const cosine = new Map<string, number>();
+
   const vecRank = new Map<string, number>();
   candidates
     .filter(c => c.embedding != null)
     .map(c => ({ id: c.id, sim: cosineSim(queryVec, decodeVector(c.embedding as Buffer)) }))
     .filter(v => v.sim > 0)
     .sort((a, b) => b.sim - a.sim)
-    .forEach((v, i) => vecRank.set(v.id, i));
+    .forEach((v, i) => { vecRank.set(v.id, i); cosine.set(v.id, v.sim); });
 
   const byId = new Map(candidates.map(c => [c.id, c]));
   const ids = new Set<string>([...bm25Rank.keys(), ...vecRank.keys()]);
@@ -117,7 +123,7 @@ export function fuseRRF(candidates: Memory[], bm25: SearchResult[], queryVec: nu
     .map(id => {
       const lex = bm25Rank.has(id) ? 1 / (RRF_K + bm25Rank.get(id)!) : 0;
       const sem = vecRank.has(id) ? 1 / (RRF_K + vecRank.get(id)!) : 0;
-      return { memory: byId.get(id)!, score: lex + sem };
+      return { memory: byId.get(id)!, score: lex + sem, bm25: bm25Score.get(id) ?? 0, cosine: cosine.get(id) ?? 0 };
     })
     .sort((a, b) => b.score - a.score);
 }

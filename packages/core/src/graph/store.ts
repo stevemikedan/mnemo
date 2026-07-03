@@ -127,6 +127,13 @@ export class MemoryStore {
     return this.db.prepare('DELETE FROM memories WHERE id = ?').run(id).changes > 0;
   }
 
+  /** Record that a recalled memory was actually used for a query (implicit feedback for a future reranker). */
+  recordFeedback(query: string, memoryId: string): void {
+    this.db.prepare(
+      'INSERT INTO recall_feedback (id, query, memory_id, features, used, created_at) VALUES (?, ?, ?, NULL, 1, ?)',
+    ).run(uuidv4(), query, memoryId, new Date().toISOString());
+  }
+
   /** Distinct scope strings present in the store, sorted. */
   listScopes(): string[] {
     return (this.db.prepare('SELECT DISTINCT scope FROM memories ORDER BY scope ASC').all() as { scope: string }[])

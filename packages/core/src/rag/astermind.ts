@@ -3,6 +3,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { TFIDFVectorizer } from '@astermind/astermind-elm';
 import { encodeVector } from './embedding.js';
+import { silenced } from '../ml/persist.js';
 import type { MemoryStore } from '../graph/store.js';
 import type { Memory } from '../graph/schema.js';
 
@@ -30,17 +31,6 @@ interface PersistedModel {
   docs: string[];
 }
 
-// The library logs to stdout on construction, which would corrupt an MCP
-// stdio stream. Silence console during any AsterMind call.
-function silenced<T>(fn: () => T): T {
-  const log = console.log;
-  console.log = () => {};
-  try {
-    return fn();
-  } finally {
-    console.log = log;
-  }
-}
 
 let cache: { key: string; vec: TFIDFVectorizer } | null = null;
 

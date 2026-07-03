@@ -4,6 +4,10 @@ import type { Memory } from '../graph/schema.js';
 export interface SearchResult {
   memory: Memory;
   score: number;
+  /** Raw lexical (BM25/lunr) score, if known — exposed by fuseRRF for a future reranker. */
+  bm25?: number;
+  /** Raw vector cosine similarity, if known — exposed by fuseRRF for a future reranker. */
+  cosine?: number;
 }
 
 export class BM25Index {

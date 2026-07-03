@@ -35,6 +35,30 @@ export const SCHEMA_SQL = `
     stats       TEXT NOT NULL DEFAULT '{}'
   );
 
+  -- Training data for the consolidation pre-screener: each LLM (or heuristic)
+  -- pairwise verdict, with the cheap features computed at decision time.
+  CREATE TABLE IF NOT EXISTS adjudication_log (
+    id         TEXT PRIMARY KEY,
+    older_id   TEXT NOT NULL,
+    newer_id   TEXT NOT NULL,
+    scope      TEXT NOT NULL,
+    phase      TEXT NOT NULL,   -- 'reconcile' | 'nrem'
+    features   TEXT NOT NULL,   -- JSON number[]
+    verdict    TEXT NOT NULL,   -- reconcile: SUPERSEDES|CONTRADICTS|NONE ; nrem: MERGE|SKIP
+    source     TEXT NOT NULL,   -- 'llm' | 'elm' | 'heuristic'
+    created_at TEXT NOT NULL
+  );
+
+  -- Implicit feedback for a future recall reranker (see record_use).
+  CREATE TABLE IF NOT EXISTS recall_feedback (
+    id         TEXT PRIMARY KEY,
+    query      TEXT NOT NULL,
+    memory_id  TEXT NOT NULL,
+    features   TEXT,            -- JSON, optional
+    used       INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope);
   CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type);
   CREATE INDEX IF NOT EXISTS idx_memories_state ON memories(state);

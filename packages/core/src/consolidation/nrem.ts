@@ -19,7 +19,10 @@ function wordOverlap(a: string, b: string): number {
   return overlap / Math.max(aWords.size, bWords.size);
 }
 
-async function adjudicate(survivor: Memory, candidate: Memory): Promise<'MERGE' | 'SKIP'> {
+export type MergeVerdict = 'MERGE' | 'SKIP';
+export type MergeAdjudicator = (survivor: Memory, candidate: Memory) => Promise<MergeVerdict>;
+
+export const defaultMerge: MergeAdjudicator = async (survivor, candidate) => {
   const response = await llmComplete(
     `Two memories may express the same fact. Should they be merged into one?\n\nMemory A: "${survivor.content}"\nMemory B: "${candidate.content}"\n\nReply with exactly one word: MERGE (same fact, consolidate) or SKIP (distinct, keep both).`,
     'You are a memory deduplication assistant. Be conservative — only merge if clearly the same fact.',
@@ -31,12 +34,13 @@ async function adjudicate(survivor: Memory, candidate: Memory): Promise<'MERGE' 
   }
 
   return response.trim().toUpperCase().includes('MERGE') ? 'MERGE' : 'SKIP';
-}
+};
 
 export async function runNREM(
   store: MemoryStore,
   graph: GraphStore,
   memories: Memory[],
+  adjudicate: MergeAdjudicator = defaultMerge,
 ): Promise<NREMStats> {
   const stats: NREMStats = { processed: 0, merged: 0, unchanged: 0 };
   const expired = new Set<string>();

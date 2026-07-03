@@ -101,7 +101,7 @@ function fnv1a(str: string): number {
  * no dependency. Captures lexical/fuzzy overlap (shared terms and phrases) — a
  * step up from BM25 for paraphrase-ish matching, though not transformer-grade.
  */
-function localEmbed(texts: string[], dim: number): number[][] {
+export function localEmbed(texts: string[], dim: number): number[][] {
   // Crude stemmer: fold common plural/gerund endings so 'containers'/'container'
   // and 'deploying'/'deploy' collide. Not linguistically correct, just enough to
   // recover the most frequent morphological variants.

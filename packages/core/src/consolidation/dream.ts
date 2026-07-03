@@ -2,11 +2,24 @@ import { v4 as uuidv4 } from 'uuid';
 import type { MemoryStore } from '../graph/store.js';
 import type { GraphStore } from '../graph/graph.js';
 import { extractSignals } from './session.js';
-import { runNREM } from './nrem.js';
+import { runNREM, defaultMerge } from './nrem.js';
 import { runREM } from './rem.js';
 import { runDecay } from './decay.js';
-import { runReconcile } from './reconcile.js';
+import { runReconcile, llmAdjudicate } from './reconcile.js';
 import { encodeForDream } from '../rag/embedding.js';
+import { readConfig } from './config.js';
+import { trainTypeClassifier } from '../ml/type-classifier.js';
+import { pairFeatures } from '../ml/featurize.js';
+import { logAdjudication } from '../ml/adjudication-log.js';
+
+/** Is a consolidation LLM actually adjudicating (so its verdicts are worth logging)? */
+function consolidationLlmActive(): boolean {
+  const p = readConfig().consolidation?.provider ?? (process.env['ANTHROPIC_API_KEY'] ? 'anthropic' : 'none');
+  return p !== 'none';
+}
+function shouldLogAdjudications(): boolean {
+  return consolidationLlmActive() && readConfig().ml?.prescreen?.logging !== false;
+}
 
 export interface DreamOptions {
   /** Exact scope to consolidate, e.g. 'project:/path/to/repo' or 'global'. Defaults to all active memories. */
@@ -57,7 +70,19 @@ export async function dream(store: MemoryStore, graph: GraphStore, opts: DreamOp
   // configured). Done first so NREM/recall can use them.
   await encodeForDream(store, memories);
 
-  const nrem = await runNREM(store, graph, memories);
+  // ML: (re)train the type classifier over the whole store — persists only if it
+  // beats the naive baseline on held-out data. Off unless ml.typeSuggest.enabled.
+  const typeReport = readConfig().ml?.typeSuggest?.enabled ? trainTypeClassifier(store) : undefined;
+
+  // NREM with a logging wrapper — captures each MERGE/SKIP verdict + features as
+  // pre-screener training data (only when an LLM is really adjudicating).
+  const nrem = await runNREM(store, graph, memories, async (survivor, candidate) => {
+    const verdict = await defaultMerge(survivor, candidate);
+    if (shouldLogAdjudications()) {
+      logAdjudication(store, { older_id: survivor.id, newer_id: candidate.id, scope: survivor.scope, phase: 'nrem', features: pairFeatures(survivor, candidate), verdict, source: 'llm' });
+    }
+    return verdict;
+  });
   const rem = runREM(store, graph, memories, opts.cwd);
   // Decay/lifecycle over the same scope (active/dormant/archived). Runs after
   // dedup/linking so merges register as recent activity first.
@@ -70,7 +95,13 @@ export async function dream(store: MemoryStore, graph: GraphStore, opts: DreamOp
   if (opts.scope && opts.scope !== 'global') {
     reconcileSet = reconcileSet.filter(m => m.scope === opts.scope || m.scope === 'global');
   }
-  const reconcile = await runReconcile(store, graph, reconcileSet);
+  const reconcile = await runReconcile(store, graph, reconcileSet, async (older, newer) => {
+    const verdict = await llmAdjudicate(older, newer);
+    if (shouldLogAdjudications()) {
+      logAdjudication(store, { older_id: older.id, newer_id: newer.id, scope: older.scope, phase: 'reconcile', features: pairFeatures(older, newer), verdict, source: 'llm' });
+    }
+    return verdict;
+  });
 
   const duration_ms = Date.now() - startMs;
 
@@ -83,7 +114,11 @@ export async function dream(store: MemoryStore, graph: GraphStore, opts: DreamOp
     opts.scope ?? 'all',
     new Date(Date.now() - duration_ms).toISOString(),
     new Date().toISOString(),
-    JSON.stringify({ ...nrem, ...rem, ...decay, ...reconcile, duration_ms }),
+    JSON.stringify({
+      ...nrem, ...rem, ...decay, ...reconcile,
+      ...(typeReport ? { type_model_trained: typeReport.trained ? 1 : 0, type_model_accuracy: Math.round((typeReport.accuracy ?? 0) * 100) / 100 } : {}),
+      duration_ms,
+    }),
   );
 
   return {

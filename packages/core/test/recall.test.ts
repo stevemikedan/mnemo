@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MemoryStore } from '../src/graph/store.js';
 import { GraphStore } from '../src/graph/graph.js';
-import { RecallEngine } from '../src/rag/recall.js';
+import { RecallEngine, fuseRRF } from '../src/rag/recall.js';
+import { BM25Index } from '../src/rag/bm25.js';
+import { encodeVector } from '../src/rag/embedding.js';
 import { __setConfig } from '../src/consolidation/config.js';
 
 // No embedding provider → pure BM25, so these assert the lexical + scoping behavior.
@@ -65,5 +67,32 @@ describe('RecallEngine.recall — scoping', () => {
     const hits = await recall.recall({ query: 'docker', scope: 'project:/a', includeRelated: true });
     const related = hits.flatMap(h => h.related ?? []);
     expect(related.some(r => r.scope === 'project:/b')).toBe(false);
+  });
+});
+
+describe('fuseRRF raw feature exposure (reranker substrate)', () => {
+  it('exposes raw bm25 score and cosine on each fused result', () => {
+    const store = new MemoryStore(':memory:');
+    const a = store.create({ content: 'alpha', scope: 'global' });
+    store.create({ content: 'beta', scope: 'global' });
+    store.setEmbedding(a.id, encodeVector([1, 0, 0]));
+    const candidates = store.query({});
+    const index = new BM25Index();
+    index.build(candidates);
+    const bm25 = index.search('alpha', 50);
+    const fused = fuseRRF(candidates, bm25, [1, 0, 0]);
+    const top = fused.find(f => f.memory.content === 'alpha')!;
+    expect(top.bm25).toBeGreaterThan(0);   // lexical hit for 'alpha'
+    expect(top.cosine).toBeCloseTo(1, 5);  // vector matches [1,0,0]
+  });
+});
+
+describe('recordFeedback (reranker substrate)', () => {
+  it('inserts a recall_feedback row', () => {
+    const store = new MemoryStore(':memory:');
+    const m = store.create({ content: 'x', scope: 'global' });
+    store.recordFeedback('how do we deploy?', m.id);
+    const rows = store.db.prepare('SELECT query, memory_id, used FROM recall_feedback').all() as any[];
+    expect(rows).toEqual([{ query: 'how do we deploy?', memory_id: m.id, used: 1 }]);
   });
 });
