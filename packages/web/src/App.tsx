@@ -75,6 +75,20 @@ export default function App() {
   // In-app help / guide
   const [showHelp, setShowHelp] = useState(false);
 
+  // Settings / config
+  const [showSettings, setShowSettings] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [cfgForm, setCfgForm] = useState({
+    embProvider: 'none', embModel: '', embBaseUrl: '',
+    consProvider: 'none', consModel: '', consApiKey: '', consHasKey: false,
+  });
+
+  // Ask (Q&A over memories)
+  const [askAnswer, setAskAnswer] = useState<string | null>(null);
+  const [askSources, setAskSources] = useState<Memory[]>([]);
+  const [askedQuestion, setAskedQuestion] = useState('');
+  const [isAsking, setIsAsking] = useState(false);
+
   // Memory creation form state
   const [newContent, setNewContent] = useState('');
   const [newType, setNewType] = useState<Memory['type']>('project');
@@ -577,6 +591,71 @@ export default function App() {
     }
   };
 
+  // Settings: load current config into the form and open the modal
+  const openSettings = async () => {
+    try {
+      const res = await fetch('/api/config');
+      if (res.ok) {
+        const c = await res.json();
+        setCfgForm({
+          embProvider: c.embeddings.provider, embModel: c.embeddings.model, embBaseUrl: c.embeddings.baseUrl,
+          consProvider: c.consolidation.provider, consModel: c.consolidation.model, consApiKey: '', consHasKey: c.consolidation.hasApiKey,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load config', err);
+    }
+    setShowSettings(true);
+  };
+
+  const saveSettings = async () => {
+    setSavingSettings(true);
+    try {
+      const res = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          embeddings: { provider: cfgForm.embProvider, model: cfgForm.embModel, baseUrl: cfgForm.embBaseUrl },
+          consolidation: { provider: cfgForm.consProvider, model: cfgForm.consModel, apiKey: cfgForm.consApiKey },
+        }),
+      });
+      if (res.ok) { setShowSettings(false); refresh(); }
+    } catch (err) {
+      console.error('Failed to save config', err);
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  // Ask a question — retrieve (scoped, hybrid) and synthesize a plain-language answer
+  const handleAsk = async () => {
+    const q = searchQuery.trim();
+    if (!q) return;
+    setIsAsking(true);
+    setAskedQuestion(q);
+    setAskAnswer(null);
+    setAskSources([]);
+    try {
+      const res = await fetch('/api/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q, scope: filterScope }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAskAnswer(data.answer ?? '');
+        setAskSources(data.sources || []);
+      } else {
+        setAskAnswer('');
+      }
+    } catch (err) {
+      console.error('Ask failed', err);
+      setAskAnswer('');
+    } finally {
+      setIsAsking(false);
+    }
+  };
+
   // Mouse Handlers for Force-Directed Graph interactions
   const handleSvgMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
     // If not clicking on a node, start canvas panning
@@ -755,6 +834,7 @@ export default function App() {
         </div>
 
         <div className="header-actions">
+          <button className="secondary" title="Settings" onClick={openSettings} style={{ width: '34px', padding: 0 }}>⚙</button>
           <button className="secondary" title="What am I looking at?" onClick={() => setShowHelp(true)} style={{ width: '34px', padding: 0 }}>?</button>
           {isDreaming && (
             <div className="dream-status-anim">
@@ -813,18 +893,58 @@ export default function App() {
 
             {activeTab === 'view' ? (
               <>
-                <div className="search-box">
-                  <svg className="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                  </svg>
-                  <input
-                    type="text"
-                    placeholder="Search memories (BM25)..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
+                <div className="search-row">
+                  <div className="search-box">
+                    <svg className="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <input
+                      type="text"
+                      placeholder="Search, or ask a question…"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleAsk(); }}
+                    />
+                  </div>
+                  <button
+                    className="primary ask-btn"
+                    onClick={handleAsk}
+                    disabled={isAsking || !searchQuery.trim()}
+                    title="Answer this question from your memories (needs a consolidation LLM configured)"
+                  >
+                    {isAsking ? '…' : 'Ask'}
+                  </button>
                 </div>
+
+                {(isAsking || askAnswer !== null) && (
+                  <div className="answer-card fade-in">
+                    <div className="answer-head">
+                      <span className="answer-label">Answer</span>
+                      <button className="collapse-btn" aria-label="Dismiss answer" onClick={() => { setAskAnswer(null); setAskSources([]); }}>×</button>
+                    </div>
+                    <div className="answer-q">{askedQuestion}</div>
+                    {isAsking ? (
+                      <div className="answer-body muted">Thinking…</div>
+                    ) : askAnswer ? (
+                      <div className="answer-body">{askAnswer}</div>
+                    ) : (
+                      <div className="answer-body muted">
+                        No answer generated. This needs a consolidation LLM — set <code>consolidation.provider</code> + an API key in <code>~/.mnemo/config.json</code> and restart. (Search results below still work.)
+                      </div>
+                    )}
+                    {askSources.length > 0 && (
+                      <div className="answer-sources">
+                        <span className="answer-sources-label">Sources</span>
+                        {askSources.map((m, i) => (
+                          <button key={m.id} className="answer-source" onClick={() => setSelectedId(m.id)} title={m.content}>
+                            [{i + 1}] {m.content.slice(0, 40)}…
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="form-group" style={{ marginBottom: '12px' }}>
                   <label>Scope / Project Workspace</label>
@@ -1414,7 +1534,7 @@ export default function App() {
 
             <div className="dream-action-pane">
               <div className="dream-info">
-                Memory consolidation runs <strong>NREM</strong> deduplication (merging similar memories) and <strong>REM</strong> association (linking related nodes) to keep memory retrieval fast and contextual.
+                <strong>Consolidate (Dream)</strong> is the routine housekeeping — dedup, link, decay, reconcile, and embed new memories. Run it periodically or after adding a batch. <strong>Reindex embeddings</strong> is only for special cases: rebuild <em>all</em> vectors from scratch after switching embedding provider, or to backfill a large batch. If you're unsure, use Consolidate.
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
@@ -1440,6 +1560,63 @@ export default function App() {
           )}
         </footer>
       </main>
+
+      {/* SETTINGS OVERLAY */}
+      {showSettings && (
+        <div className="help-overlay" onClick={() => setShowSettings(false)}>
+          <div className="help-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '460px' }}>
+            <div className="help-header">
+              <h2>Settings</h2>
+              <button className="collapse-btn" aria-label="Close settings" onClick={() => setShowSettings(false)}>×</button>
+            </div>
+            <div className="help-body">
+              <h3>Embeddings — semantic search</h3>
+              <div className="form-group">
+                <label>Provider</label>
+                <select value={cfgForm.embProvider} onChange={(e) => setCfgForm({ ...cfgForm, embProvider: e.target.value })}>
+                  <option value="none">none (keyword / BM25 only)</option>
+                  <option value="local">local (built-in hashing, no deps)</option>
+                  <option value="astermind">astermind (on-device TF-IDF, no deps)</option>
+                  <option value="ollama">ollama (local server)</option>
+                  <option value="openai">openai / gemini (API)</option>
+                </select>
+              </div>
+              {(cfgForm.embProvider === 'openai' || cfgForm.embProvider === 'ollama') && (
+                <>
+                  <div className="form-group"><label>Model</label><input value={cfgForm.embModel} onChange={(e) => setCfgForm({ ...cfgForm, embModel: e.target.value })} placeholder={cfgForm.embProvider === 'ollama' ? 'nomic-embed-text' : 'text-embedding-3-small'} /></div>
+                  <div className="form-group"><label>Base URL</label><input value={cfgForm.embBaseUrl} onChange={(e) => setCfgForm({ ...cfgForm, embBaseUrl: e.target.value })} placeholder={cfgForm.embProvider === 'ollama' ? 'http://localhost:11434' : 'https://api.openai.com/v1'} /></div>
+                </>
+              )}
+
+              <h3>Consolidation LLM — Ask answers, dedup, contradiction detection</h3>
+              <div className="form-group">
+                <label>Provider</label>
+                <select value={cfgForm.consProvider} onChange={(e) => setCfgForm({ ...cfgForm, consProvider: e.target.value })}>
+                  <option value="none">none (no answers / heuristic dedup)</option>
+                  <option value="claude-cli">claude-cli — uses your Claude Code login, no API key</option>
+                  <option value="anthropic">anthropic — direct API, needs a key</option>
+                </select>
+              </div>
+              {cfgForm.consProvider !== 'none' && (
+                <div className="form-group"><label>Model</label><input value={cfgForm.consModel} onChange={(e) => setCfgForm({ ...cfgForm, consModel: e.target.value })} placeholder="haiku" /></div>
+              )}
+              {cfgForm.consProvider === 'anthropic' && (
+                <div className="form-group">
+                  <label>API key {cfgForm.consHasKey ? '(saved — leave blank to keep)' : ''}</label>
+                  <input type="password" value={cfgForm.consApiKey} onChange={(e) => setCfgForm({ ...cfgForm, consApiKey: e.target.value })} placeholder={cfgForm.consHasKey ? '••••••••' : 'sk-ant-…'} />
+                </div>
+              )}
+
+              <button className="primary" onClick={saveSettings} disabled={savingSettings} style={{ marginTop: '14px', padding: '9px 16px' }}>
+                {savingSettings ? 'Saving…' : 'Save & apply'}
+              </button>
+              <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                Applied immediately — no restart. Consolidation changes take effect on the next Ask/dream. Changing the <em>embeddings</em> provider requires a <strong>Reindex embeddings</strong> to re-encode.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* HELP / GUIDE OVERLAY */}
       {showHelp && (

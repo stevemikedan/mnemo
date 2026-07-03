@@ -1,5 +1,8 @@
 import type { ViteDevServer } from 'vite';
-import { MemoryStore, GraphStore, dream, searchHybrid, readConfig, reindexEmbeddings } from '@mnemo/core';
+import { writeFileSync, mkdirSync } from 'fs';
+import { homedir } from 'os';
+import { join } from 'path';
+import { MemoryStore, GraphStore, dream, searchHybrid, readConfig, reloadConfig, reindexEmbeddings, answerFromMemories } from '@mnemo/core';
 import type { MemoryType, EdgeType, MemoryState } from '@mnemo/core';
 
 /** Drop the vector BLOB before serializing a memory to the client. */
@@ -64,6 +67,25 @@ export function createApiHandler(store: MemoryStore, graph: GraphStore) {
             const encoded = (store.db.prepare('SELECT COUNT(*) n FROM memories WHERE embedding IS NOT NULL').get() as { n: number }).n;
             res.statusCode = 200;
             res.end(JSON.stringify({ ...status, embeddings: { provider, encoded } }));
+            return;
+          }
+
+          // GET /api/config - current config (API key redacted)
+          if (req.method === 'GET' && path === '/api/config') {
+            const cfg = readConfig();
+            res.statusCode = 200;
+            res.end(JSON.stringify({
+              embeddings: {
+                provider: cfg.embeddings?.provider ?? 'none',
+                model: cfg.embeddings?.model ?? '',
+                baseUrl: cfg.embeddings?.baseUrl ?? '',
+              },
+              consolidation: {
+                provider: cfg.consolidation?.provider ?? 'none',
+                model: cfg.consolidation?.model ?? '',
+                hasApiKey: !!cfg.consolidation?.apiKey,
+              },
+            }));
             return;
           }
 
@@ -307,6 +329,55 @@ export function createApiHandler(store: MemoryStore, graph: GraphStore) {
               const result = await reindexEmbeddings(store);
               res.statusCode = 200;
               res.end(JSON.stringify(result));
+              return;
+            }
+
+            // POST /api/config - write config.json and apply live (no restart)
+            if (path === '/api/config') {
+              const current = readConfig();
+              const next: any = {
+                ...current,
+                embeddings: { ...current.embeddings, ...(body.embeddings || {}) },
+                consolidation: { ...current.consolidation, ...(body.consolidation || {}) },
+              };
+              // Preserve an existing key if the UI left the field blank.
+              if (!body.consolidation || body.consolidation.apiKey === undefined || body.consolidation.apiKey === '') {
+                if (current.consolidation?.apiKey) next.consolidation.apiKey = current.consolidation.apiKey;
+                else delete next.consolidation.apiKey;
+              }
+              // Drop empty optional fields for a clean file.
+              for (const section of ['embeddings', 'consolidation'] as const) {
+                for (const k of Object.keys(next[section])) {
+                  if (next[section][k] === '' || next[section][k] === undefined) delete next[section][k];
+                }
+              }
+              mkdirSync(join(homedir(), '.mnemo'), { recursive: true });
+              writeFileSync(join(homedir(), '.mnemo', 'config.json'), JSON.stringify(next, null, 2));
+              reloadConfig();
+              res.statusCode = 200;
+              res.end(JSON.stringify({ ok: true }));
+              return;
+            }
+
+            // POST /api/ask - retrieve (scoped, hybrid) + synthesize a plain-language answer
+            if (path === '/api/ask') {
+              const query = (body.query || '').trim();
+              const scope = body.scope;
+              if (!query) {
+                res.statusCode = 200;
+                res.end(JSON.stringify({ answer: null, sources: [] }));
+                return;
+              }
+              const scopeFilter = (!scope || scope === 'all') ? undefined : scope;
+              let sql = `SELECT * FROM memories WHERE state IN ('active','dormant')`;
+              const qp: any[] = [];
+              if (scopeFilter) { sql += ' AND scope = ?'; qp.push(scopeFilter); }
+              const rows = store.db.prepare(sql).all(...qp) as any[];
+              const parsed = rows.map(r => ({ ...r, tags: JSON.parse(r.tags), metadata: JSON.parse(r.metadata) }));
+              const top = await searchHybrid(parsed, query, 6);
+              const answer = await answerFromMemories(query, top.map(t => t.memory));
+              res.statusCode = 200;
+              res.end(JSON.stringify({ answer, sources: top.map(t => stripEmb(t.memory)) }));
               return;
             }
           }
