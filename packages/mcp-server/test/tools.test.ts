@@ -48,7 +48,7 @@ describe('MCP tool surface', () => {
     expect(names).toEqual([
       'consolidate_session', 'delete_memory', 'dream', 'forget', 'get_dream_log',
       'get_memory', 'get_status', 'link', 'list_memories', 'list_scopes',
-      'recall', 'reindex_embeddings', 'remember', 'unlink', 'update',
+      'recall', 'record_use', 'reindex_embeddings', 'remember', 'unlink', 'update',
     ]);
   });
 });
