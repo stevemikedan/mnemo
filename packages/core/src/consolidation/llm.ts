@@ -22,7 +22,48 @@ export async function llmComplete(prompt: string, system?: string): Promise<stri
   if (provider === 'none') return null;
   if (provider === 'claude-cli') return claudeCliComplete(prompt, system);
   if (provider === 'anthropic') return anthropicComplete(prompt, system);
+  if (provider === 'openai' || provider === 'ollama') return openaiCompatComplete(provider, prompt, system);
   return null;
+}
+
+const LLM_TIMEOUT_MS = 60_000;
+
+/**
+ * Generic OpenAI-compatible chat completion — covers OpenAI, Gemini (via
+ * Google's compat endpoint), Groq, Ollama, LM Studio, and anything else that
+ * speaks POST {baseUrl}/chat/completions. Returns null on any failure so
+ * callers fall back gracefully.
+ */
+async function openaiCompatComplete(provider: 'openai' | 'ollama', prompt: string, system: string | undefined): Promise<string | null> {
+  const cfg = readConfig().consolidation ?? {};
+  const baseUrl = (cfg.baseUrl ?? (provider === 'ollama' ? 'http://localhost:11434/v1' : 'https://api.openai.com/v1')).replace(/\/$/, '');
+  const model = cfg.model ?? (provider === 'ollama' ? 'llama3.2' : 'gpt-4o-mini');
+  const apiKey = cfg.apiKey ?? process.env['OPENAI_API_KEY'] ?? 'none'; // ollama ignores it, but the header must exist
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), LLM_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model,
+        max_tokens: 256,
+        messages: [
+          { role: 'system', content: system ?? 'You are a memory consolidation assistant. Be concise.' },
+          { role: 'user', content: prompt },
+        ],
+      }),
+      signal: ctrl.signal,
+    });
+    if (!response.ok) return null;
+    const data = await response.json() as { choices?: { message?: { content?: string } }[] };
+    return data.choices?.[0]?.message?.content ?? null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**

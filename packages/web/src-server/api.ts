@@ -83,6 +83,7 @@ export function createApiHandler(store: MemoryStore, graph: GraphStore) {
               consolidation: {
                 provider: cfg.consolidation?.provider ?? 'none',
                 model: cfg.consolidation?.model ?? '',
+                baseUrl: cfg.consolidation?.baseUrl ?? '',
                 hasApiKey: !!cfg.consolidation?.apiKey,
               },
             }));

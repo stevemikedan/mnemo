@@ -80,7 +80,7 @@ export default function App() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [cfgForm, setCfgForm] = useState({
     embProvider: 'none', embModel: '', embBaseUrl: '',
-    consProvider: 'none', consModel: '', consApiKey: '', consHasKey: false,
+    consProvider: 'none', consModel: '', consBaseUrl: '', consApiKey: '', consHasKey: false,
   });
 
   // Ask (Q&A over memories)
@@ -599,7 +599,7 @@ export default function App() {
         const c = await res.json();
         setCfgForm({
           embProvider: c.embeddings.provider, embModel: c.embeddings.model, embBaseUrl: c.embeddings.baseUrl,
-          consProvider: c.consolidation.provider, consModel: c.consolidation.model, consApiKey: '', consHasKey: c.consolidation.hasApiKey,
+          consProvider: c.consolidation.provider, consModel: c.consolidation.model, consBaseUrl: c.consolidation.baseUrl || '', consApiKey: '', consHasKey: c.consolidation.hasApiKey,
         });
       }
     } catch (err) {
@@ -616,7 +616,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           embeddings: { provider: cfgForm.embProvider, model: cfgForm.embModel, baseUrl: cfgForm.embBaseUrl },
-          consolidation: { provider: cfgForm.consProvider, model: cfgForm.consModel, apiKey: cfgForm.consApiKey },
+          consolidation: { provider: cfgForm.consProvider, model: cfgForm.consModel, baseUrl: cfgForm.consBaseUrl, apiKey: cfgForm.consApiKey },
         }),
       });
       if (res.ok) { setShowSettings(false); refresh(); }
@@ -1595,15 +1595,20 @@ export default function App() {
                   <option value="none">none (no answers / heuristic dedup)</option>
                   <option value="claude-cli">claude-cli — uses your Claude Code login, no API key</option>
                   <option value="anthropic">anthropic — direct API, needs a key</option>
+                  <option value="openai">openai-compatible — OpenAI / Gemini / Groq / any compat API</option>
+                  <option value="ollama">ollama — local server, no key</option>
                 </select>
               </div>
               {cfgForm.consProvider !== 'none' && (
-                <div className="form-group"><label>Model</label><input value={cfgForm.consModel} onChange={(e) => setCfgForm({ ...cfgForm, consModel: e.target.value })} placeholder="haiku" /></div>
+                <div className="form-group"><label>Model</label><input value={cfgForm.consModel} onChange={(e) => setCfgForm({ ...cfgForm, consModel: e.target.value })} placeholder={cfgForm.consProvider === 'openai' ? 'gpt-4o-mini / gemini-2.5-flash' : cfgForm.consProvider === 'ollama' ? 'llama3.2' : 'haiku'} /></div>
               )}
-              {cfgForm.consProvider === 'anthropic' && (
+              {(cfgForm.consProvider === 'openai' || cfgForm.consProvider === 'ollama') && (
+                <div className="form-group"><label>Base URL</label><input value={cfgForm.consBaseUrl} onChange={(e) => setCfgForm({ ...cfgForm, consBaseUrl: e.target.value })} placeholder={cfgForm.consProvider === 'ollama' ? 'http://localhost:11434/v1' : 'https://api.openai.com/v1 (or Gemini compat URL)'} /></div>
+              )}
+              {(cfgForm.consProvider === 'anthropic' || cfgForm.consProvider === 'openai') && (
                 <div className="form-group">
                   <label>API key {cfgForm.consHasKey ? '(saved — leave blank to keep)' : ''}</label>
-                  <input type="password" value={cfgForm.consApiKey} onChange={(e) => setCfgForm({ ...cfgForm, consApiKey: e.target.value })} placeholder={cfgForm.consHasKey ? '••••••••' : 'sk-ant-…'} />
+                  <input type="password" value={cfgForm.consApiKey} onChange={(e) => setCfgForm({ ...cfgForm, consApiKey: e.target.value })} placeholder={cfgForm.consHasKey ? '••••••••' : 'sk-…'} />
                 </div>
               )}
 
