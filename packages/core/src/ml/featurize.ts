@@ -12,7 +12,7 @@ export function textFeatures(content: string): number[] {
   return localEmbed([content], TEXT_FEATURE_DIM)[0];
 }
 
-function wordOverlap(a: string, b: string): number {
+export function wordOverlap(a: string, b: string): number {
   const A = new Set(a.toLowerCase().match(/\b\w{4,}\b/g) ?? []);
   const B = new Set(b.toLowerCase().match(/\b\w{4,}\b/g) ?? []);
   if (A.size === 0 || B.size === 0) return 0;

@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { readConfig, suggestType } from '@mnemo/core';
+import { readConfig, suggestType, suggestTags, findNearDuplicates } from '@mnemo/core';
 import type { MemoryStore } from '@mnemo/core';
 import type { GraphStore } from '@mnemo/core';
 import type { MemoryType, EdgeType } from '@mnemo/core';
@@ -14,22 +14,58 @@ export function registerWriteTools(server: McpServer, store: MemoryStore, graph:
       scope: z.string().optional().default('global').describe('global | project:{abs_path}'),
       tags: z.array(z.string()).optional().default([]),
       importance: z.number().min(0).max(1).optional().default(0.5),
+      skip_if_duplicate: z.boolean().optional().default(false).describe('If a near-duplicate already exists in this scope, do not store; return the existing memory instead.'),
     }),
-  }, async ({ content, type, scope, tags, importance }) => {
-    let finalType = type as MemoryType | undefined;
+  }, async ({ content, type, scope, tags, importance, skip_if_duplicate }) => {
     let note = '';
-    let metadata: Record<string, unknown> | undefined;
+    const metadata: Record<string, unknown> = {};
+
+    // Near-duplicate check (warn-only unless skip_if_duplicate). Any failure in
+    // the check must never block the write.
+    try {
+      const dups = await findNearDuplicates(store, content, scope);
+      if (dups.length > 0) {
+        const d = dups[0];
+        const pct = Math.round(d.similarity * 100);
+        if (skip_if_duplicate) {
+          return {
+            content: [{ type: 'text' as const, text: `Not stored — near-duplicate (${pct}% similar, ${d.basis}) of existing memory ${d.memory.id}:\n"${d.memory.content.slice(0, 120)}"\nUse \`update\` on it instead, or call remember without skip_if_duplicate to store anyway.` }],
+          };
+        }
+        note += `\n⚠ Possible duplicate of ${d.memory.id} (${pct}% similar, ${d.basis}): "${d.memory.content.slice(0, 80)}" — consider \`update\`/\`delete_memory\` if redundant.`;
+        metadata.possible_duplicate_of = d.memory.id;
+      }
+    } catch { /* dedup must never block a write */ }
+
+    let finalType = type as MemoryType | undefined;
     if (!finalType) {
       const suggested = readConfig().ml?.typeSuggest?.enabled ? suggestType(content) : null;
       if (suggested) {
         finalType = suggested.type;
-        note = `\nType inferred as \`${suggested.type}\` (confidence ${suggested.confidence.toFixed(2)}) — pass \`type\` to override.`;
-        metadata = { type_suggested_by: 'elm', type_confidence: suggested.confidence };
+        note += `\nType inferred as \`${suggested.type}\` (confidence ${suggested.confidence.toFixed(2)}, margin ${suggested.margin.toFixed(2)}) — pass \`type\` to override.`;
+        metadata.type_suggested_by = 'elm';
+        metadata.type_confidence = suggested.confidence;
       } else {
         finalType = 'project';
       }
     }
-    const memory = store.create({ content, type: finalType, scope, tags, importance, source: 'user', metadata });
+
+    let finalTags = tags;
+    if (finalTags.length === 0) {
+      try {
+        const suggested = suggestTags(store, content);
+        if (suggested.length > 0) {
+          finalTags = suggested;
+          note += `\nTags suggested: ${suggested.map(t => `#${t}`).join(' ')} — pass \`tags\` to override.`;
+          metadata.tags_suggested_by = 'knn';
+        }
+      } catch { /* tag suggestion must never block a write */ }
+    }
+
+    const memory = store.create({
+      content, type: finalType, scope, tags: finalTags, importance, source: 'user',
+      metadata: Object.keys(metadata).length ? metadata : undefined,
+    });
     return {
       content: [{ type: 'text' as const, text: `Stored memory ${memory.id}\nContent: ${memory.content}\nScope: ${memory.scope}\nType: ${memory.type}${note}` }],
     };

@@ -22,6 +22,10 @@ export interface MnemoConfig {
   ml?: {
     /** ELM type suggestion on remember(). Off by default. */
     typeSuggest?: { enabled?: boolean; minConfidence?: number; minMargin?: number };
+    /** KNN tag suggestion on remember(). Off by default. */
+    tagSuggest?: { enabled?: boolean; minSim?: number; voteThreshold?: number; maxTags?: number };
+    /** Write-time near-duplicate warning. On by default (warn-only, never blocks). */
+    dedup?: { enabled?: boolean; overlapThreshold?: number; cosineThreshold?: number };
     /** Consolidation pre-screener (logging now; gating later). Off by default. */
     prescreen?: { enabled?: boolean; logging?: boolean };
   };

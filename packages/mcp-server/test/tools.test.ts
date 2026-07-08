@@ -46,7 +46,7 @@ describe('MCP tool surface', () => {
     const { tools } = await client.listTools();
     const names = tools.map(t => t.name).sort();
     expect(names).toEqual([
-      'consolidate_session', 'delete_memory', 'dream', 'forget', 'get_dream_log',
+      'ask_memory', 'consolidate_session', 'delete_memory', 'dream', 'forget', 'get_dream_log',
       'get_memory', 'get_status', 'link', 'list_memories', 'list_scopes',
       'recall', 'record_use', 'reindex_embeddings', 'remember', 'unlink', 'update',
     ]);
@@ -134,6 +134,37 @@ describe('input validation', () => {
       errored = true;
     }
     expect(errored).toBe(true);
+  });
+});
+
+describe('dedup on remember', () => {
+  it('warns on a near-duplicate but still stores', async () => {
+    await remember('the release pipeline builds docker images and pushes them to the registry', { scope: 'project:/dup' });
+    const r = textOf(await call('remember', { content: 'the release pipeline builds docker images and pushes them to registries', scope: 'project:/dup' }));
+    expect(r).toContain('Stored memory');
+    expect(r).toContain('Possible duplicate');
+  });
+
+  it('skip_if_duplicate refuses to store and points at the existing memory', async () => {
+    const id = await remember('database migrations always run through the drizzle orm toolkit', { scope: 'project:/dup2' });
+    const r = textOf(await call('remember', { content: 'database migrations always run through the drizzle orm toolkit', scope: 'project:/dup2', skip_if_duplicate: true }));
+    expect(r).toContain('Not stored');
+    expect(r).toContain(id);
+  });
+
+  it('does not warn across scopes', async () => {
+    await remember('the api rate limiter caps requests at one hundred per minute', { scope: 'project:/dup3' });
+    const r = textOf(await call('remember', { content: 'the api rate limiter caps requests at one hundred per minute', scope: 'project:/dup4' }));
+    expect(r).not.toContain('Possible duplicate');
+  });
+});
+
+describe('ask_memory without an LLM', () => {
+  it('falls back to returning top matching memories', async () => {
+    await remember('the frontend uses vite with react and typescript', { scope: 'project:/ask' });
+    const r = textOf(await call('ask_memory', { question: 'what does the frontend use?', scope: 'project:/ask' }));
+    expect(r).toContain('vite');
+    expect(r).toContain('No LLM configured');
   });
 });
 

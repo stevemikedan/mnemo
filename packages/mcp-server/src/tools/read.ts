@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { answerFromMemories } from '@mnemo/core';
 import type { MemoryStore } from '@mnemo/core';
 import type { GraphStore } from '@mnemo/core';
 import type { RecallEngine } from '@mnemo/core';
@@ -108,6 +109,29 @@ export function registerReadTools(server: McpServer, store: MemoryStore, graph: 
       `Distinct scopes: ${status.byScope}`,
     ].join('\n');
     return { content: [{ type: 'text' as const, text }] };
+  });
+
+  server.registerTool('ask_memory', {
+    description: 'Ask a plain-language question and get a short synthesized answer grounded ONLY in stored memories (with the sources). Needs a consolidation LLM configured; without one, falls back to returning the top matching memories.',
+    inputSchema: z.object({
+      question: z.string().describe('A natural-language question, e.g. "how do we deploy this project?"'),
+      scope: z.string().optional().describe('Your project scope (e.g. project:/path). Searches global + that project. Omit for all scopes.'),
+      cwd: z.string().optional().describe('Current working directory — alternative to scope.'),
+    }),
+  }, async ({ question, scope, cwd }) => {
+    const hits = await recall.recall({ query: question, scope, cwd, limit: 6, includeRelated: false });
+    if (hits.length === 0) {
+      return { content: [{ type: 'text' as const, text: 'No stored memories match that question.' }] };
+    }
+    const answer = await answerFromMemories(question, hits.map(h => h.memory));
+    const sources = hits.map((h, i) => `[${i + 1}] (${h.memory.type}) ${h.memory.content.slice(0, 100)}`).join('\n');
+    if (answer) {
+      return { content: [{ type: 'text' as const, text: `${answer}\n\nSources:\n${sources}` }] };
+    }
+    // Fallback: no consolidation LLM — still useful, return the matches.
+    return {
+      content: [{ type: 'text' as const, text: `(No LLM configured for synthesis — top matching memories:)\n${sources}` }],
+    };
   });
 
   server.registerTool('list_scopes', {
