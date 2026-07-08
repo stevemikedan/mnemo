@@ -78,6 +78,7 @@ export default function App() {
   // Settings / config
   const [showSettings, setShowSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [modelOptions, setModelOptions] = useState<{ emb: string[]; cons: string[] }>({ emb: [], cons: [] });
   const [cfgForm, setCfgForm] = useState({
     embProvider: 'none', embModel: '', embBaseUrl: '',
     consProvider: 'none', consModel: '', consBaseUrl: '', consApiKey: '', consHasKey: false,
@@ -591,6 +592,18 @@ export default function App() {
     }
   };
 
+  // Fetch the configured provider's live model list (empty on failure → free text)
+  const loadModels = async (role: 'consolidation' | 'embeddings', provider: string, baseUrl: string) => {
+    try {
+      const qs = new URLSearchParams({ role, provider, baseUrl });
+      const res = await fetch(`/api/models?${qs}`);
+      const models = res.ok ? (await res.json()).models || [] : [];
+      setModelOptions(prev => role === 'embeddings' ? { ...prev, emb: models } : { ...prev, cons: models });
+    } catch {
+      setModelOptions(prev => role === 'embeddings' ? { ...prev, emb: [] } : { ...prev, cons: [] });
+    }
+  };
+
   // Settings: load current config into the form and open the modal
   const openSettings = async () => {
     try {
@@ -601,6 +614,8 @@ export default function App() {
           embProvider: c.embeddings.provider, embModel: c.embeddings.model, embBaseUrl: c.embeddings.baseUrl,
           consProvider: c.consolidation.provider, consModel: c.consolidation.model, consBaseUrl: c.consolidation.baseUrl || '', consApiKey: '', consHasKey: c.consolidation.hasApiKey,
         });
+        loadModels('consolidation', c.consolidation.provider, c.consolidation.baseUrl || '');
+        loadModels('embeddings', c.embeddings.provider, c.embeddings.baseUrl || '');
       }
     } catch (err) {
       console.error('Failed to load config', err);
@@ -1573,7 +1588,7 @@ export default function App() {
               <h3>Embeddings — semantic search</h3>
               <div className="form-group">
                 <label>Provider</label>
-                <select value={cfgForm.embProvider} onChange={(e) => setCfgForm({ ...cfgForm, embProvider: e.target.value })}>
+                <select value={cfgForm.embProvider} onChange={(e) => { const p = e.target.value; setCfgForm({ ...cfgForm, embProvider: p }); loadModels('embeddings', p, cfgForm.embBaseUrl); }}>
                   <option value="none">none (keyword / BM25 only)</option>
                   <option value="local">local (built-in hashing, no deps)</option>
                   <option value="astermind">astermind (on-device TF-IDF, no deps)</option>
@@ -1583,7 +1598,11 @@ export default function App() {
               </div>
               {(cfgForm.embProvider === 'openai' || cfgForm.embProvider === 'ollama') && (
                 <>
-                  <div className="form-group"><label>Model</label><input value={cfgForm.embModel} onChange={(e) => setCfgForm({ ...cfgForm, embModel: e.target.value })} placeholder={cfgForm.embProvider === 'ollama' ? 'nomic-embed-text' : 'text-embedding-3-small'} /></div>
+                  <div className="form-group">
+                    <label>Model {modelOptions.emb.length > 0 ? `(${modelOptions.emb.length} available)` : ''}</label>
+                    <input list="emb-models" value={cfgForm.embModel} onChange={(e) => setCfgForm({ ...cfgForm, embModel: e.target.value })} placeholder={cfgForm.embProvider === 'ollama' ? 'nomic-embed-text' : 'text-embedding-3-small'} />
+                    <datalist id="emb-models">{modelOptions.emb.map(m => <option key={m} value={m} />)}</datalist>
+                  </div>
                   <div className="form-group"><label>Base URL</label><input value={cfgForm.embBaseUrl} onChange={(e) => setCfgForm({ ...cfgForm, embBaseUrl: e.target.value })} placeholder={cfgForm.embProvider === 'ollama' ? 'http://localhost:11434' : 'https://api.openai.com/v1'} /></div>
                 </>
               )}
@@ -1591,7 +1610,7 @@ export default function App() {
               <h3>Consolidation LLM — Ask answers, dedup, contradiction detection</h3>
               <div className="form-group">
                 <label>Provider</label>
-                <select value={cfgForm.consProvider} onChange={(e) => setCfgForm({ ...cfgForm, consProvider: e.target.value })}>
+                <select value={cfgForm.consProvider} onChange={(e) => { const p = e.target.value; setCfgForm({ ...cfgForm, consProvider: p }); loadModels('consolidation', p, cfgForm.consBaseUrl); }}>
                   <option value="none">none (no answers / heuristic dedup)</option>
                   <option value="claude-cli">claude-cli — uses your Claude Code login, no API key</option>
                   <option value="anthropic">anthropic — direct API, needs a key</option>
@@ -1600,7 +1619,11 @@ export default function App() {
                 </select>
               </div>
               {cfgForm.consProvider !== 'none' && (
-                <div className="form-group"><label>Model</label><input value={cfgForm.consModel} onChange={(e) => setCfgForm({ ...cfgForm, consModel: e.target.value })} placeholder={cfgForm.consProvider === 'openai' ? 'gpt-4o-mini / gemini-2.5-flash' : cfgForm.consProvider === 'ollama' ? 'llama3.2' : 'haiku'} /></div>
+                <div className="form-group">
+                  <label>Model {modelOptions.cons.length > 0 ? `(${modelOptions.cons.length} available)` : ''}</label>
+                  <input list="cons-models" value={cfgForm.consModel} onChange={(e) => setCfgForm({ ...cfgForm, consModel: e.target.value })} placeholder={cfgForm.consProvider === 'openai' ? 'gpt-4o-mini / gemini-2.5-flash' : cfgForm.consProvider === 'ollama' ? 'llama3.2' : 'haiku'} />
+                  <datalist id="cons-models">{modelOptions.cons.map(m => <option key={m} value={m} />)}</datalist>
+                </div>
               )}
               {(cfgForm.consProvider === 'openai' || cfgForm.consProvider === 'ollama') && (
                 <div className="form-group"><label>Base URL</label><input value={cfgForm.consBaseUrl} onChange={(e) => setCfgForm({ ...cfgForm, consBaseUrl: e.target.value })} placeholder={cfgForm.consProvider === 'ollama' ? 'http://localhost:11434/v1' : 'https://api.openai.com/v1 (or Gemini compat URL)'} /></div>

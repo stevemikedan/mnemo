@@ -90,6 +90,48 @@ export function createApiHandler(store: MemoryStore, graph: GraphStore) {
             return;
           }
 
+          // GET /api/models?role=consolidation|embeddings&provider=...&baseUrl=...
+          // Lists the configured provider's available models by querying the
+          // provider's own listing API at request time — no hardcoded model
+          // list to maintain. Returns [] on any failure (UI falls back to free
+          // text). provider/baseUrl may come from the (unsaved) settings form;
+          // the API key always comes from saved config/env, never the client.
+          if (req.method === 'GET' && path === '/api/models') {
+            const role = url.searchParams.get('role') === 'embeddings' ? 'embeddings' : 'consolidation';
+            const cfg = readConfig();
+            const saved = role === 'embeddings' ? cfg.embeddings : cfg.consolidation;
+            const provider = url.searchParams.get('provider') || saved?.provider || 'none';
+            const baseUrl = (url.searchParams.get('baseUrl') || saved?.baseUrl || '').replace(/\/$/, '');
+            let models: string[] = [];
+            try {
+              if (provider === 'claude-cli') {
+                // CLI aliases resolve to the latest model of each tier — self-updating.
+                models = ['haiku', 'sonnet', 'opus'];
+              } else if (provider === 'anthropic') {
+                const key = saved && 'apiKey' in saved ? (saved as any).apiKey : process.env.ANTHROPIC_API_KEY;
+                if (key) {
+                  const r = await fetch('https://api.anthropic.com/v1/models', {
+                    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+                    signal: AbortSignal.timeout(8000),
+                  });
+                  if (r.ok) models = (((await r.json()) as any).data ?? []).map((m: any) => m.id);
+                }
+              } else if (provider === 'openai' || provider === 'ollama') {
+                const base = baseUrl || (provider === 'ollama' ? 'http://localhost:11434/v1' : 'https://api.openai.com/v1');
+                const key = (saved as any)?.apiKey ?? process.env.OPENAI_API_KEY ?? 'none';
+                const r = await fetch(`${base}/models`, {
+                  headers: { authorization: `Bearer ${key}` },
+                  signal: AbortSignal.timeout(8000),
+                });
+                if (r.ok) models = (((await r.json()) as any).data ?? []).map((m: any) => m.id);
+                if (role === 'embeddings') models = models.filter(id => id.toLowerCase().includes('embed'));
+              }
+            } catch { /* listing failure → empty list, UI stays free-text */ }
+            res.statusCode = 200;
+            res.end(JSON.stringify({ models: models.sort() }));
+            return;
+          }
+
           // GET /api/scopes - Get all unique project scopes in the database
           if (req.method === 'GET' && path === '/api/scopes') {
             const rows = store.db.prepare(`
