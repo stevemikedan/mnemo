@@ -107,6 +107,18 @@ export function createApiHandler(store: MemoryStore, graph: GraphStore) {
               if (provider === 'claude-cli') {
                 // CLI aliases resolve to the latest model of each tier — self-updating.
                 models = ['haiku', 'sonnet', 'opus'];
+                // The CLI also accepts full model IDs; when a key is available,
+                // enrich with Anthropic's live catalog so versions are pickable.
+                const key = process.env.ANTHROPIC_API_KEY;
+                if (key) {
+                  try {
+                    const r = await fetch('https://api.anthropic.com/v1/models', {
+                      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+                      signal: AbortSignal.timeout(8000),
+                    });
+                    if (r.ok) models = models.concat((((await r.json()) as any).data ?? []).map((m: any) => m.id));
+                  } catch { /* aliases still work */ }
+                }
               } else if (provider === 'anthropic') {
                 const key = saved && 'apiKey' in saved ? (saved as any).apiKey : process.env.ANTHROPIC_API_KEY;
                 if (key) {
@@ -127,8 +139,11 @@ export function createApiHandler(store: MemoryStore, graph: GraphStore) {
                 if (role === 'embeddings') models = models.filter(id => id.toLowerCase().includes('embed'));
               }
             } catch { /* listing failure → empty list, UI stays free-text */ }
+            // Keep claude-cli's aliases at the top (they self-update); sort the rest.
+            const aliases = ['haiku', 'sonnet', 'opus'].filter(a => models.includes(a));
+            const rest = [...new Set(models.filter(m => !aliases.includes(m)))].sort();
             res.statusCode = 200;
-            res.end(JSON.stringify({ models: models.sort() }));
+            res.end(JSON.stringify({ models: [...aliases, ...rest] }));
             return;
           }
 
