@@ -48,14 +48,18 @@ function loadModel(): ElmClassifier<MemoryType> | null {
  * the prediction is below the configured confidence/margin gate, or the feature
  * dims mismatch. Suggest-only — callers keep their own default when this is null.
  */
-export function suggestType(content: string): { type: MemoryType; confidence: number } | null {
+export function suggestType(content: string): { type: MemoryType; confidence: number; margin: number } | null {
   const clf = loadModel();
   if (!clf) return null;
   const p = clf.predict(textFeatures(content));
   if (!p) return null;
   const cfg = readConfig().ml?.typeSuggest;
-  const minConfidence = cfg?.minConfidence ?? 0.75;
-  const minMargin = cfg?.minMargin ?? 0.15;
+  // ELM softmax is systematically underconfident (top prob ~0.3 even at 98%
+  // accuracy), so the gate is margin-based (top − runner-up), which is
+  // well-calibrated for this model. An absolute-confidence floor stays
+  // available but defaults low.
+  const minConfidence = cfg?.minConfidence ?? 0.0;
+  const minMargin = cfg?.minMargin ?? 0.1;
   if (p.confidence < minConfidence || p.margin < minMargin) return null;
-  return { type: p.label, confidence: p.confidence };
+  return { type: p.label, confidence: p.confidence, margin: p.margin };
 }
