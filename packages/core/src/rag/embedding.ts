@@ -16,7 +16,9 @@ import type { Memory } from '../graph/schema.js';
  * callers.
  */
 
-const EMBED_TIMEOUT_MS = 10_000;
+// Generous because a local provider (Ollama) cold-loads the model into memory
+// on the first call — measured ~45s for nomic-embed-text; warm calls are <1s.
+const EMBED_TIMEOUT_MS = 90_000;
 
 export function isEmbeddingConfigured(): boolean {
   const provider = readConfig().embeddings?.provider;
