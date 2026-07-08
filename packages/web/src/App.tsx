@@ -79,6 +79,8 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [modelOptions, setModelOptions] = useState<{ emb: string[]; cons: string[] }>({ emb: [], cons: [] });
+  // When true, the model field shows a free-text input instead of the select.
+  const [customModel, setCustomModel] = useState<{ emb: boolean; cons: boolean }>({ emb: false, cons: false });
   const [cfgForm, setCfgForm] = useState({
     embProvider: 'none', embModel: '', embBaseUrl: '',
     consProvider: 'none', consModel: '', consBaseUrl: '', consApiKey: '', consHasKey: false,
@@ -614,6 +616,7 @@ export default function App() {
           embProvider: c.embeddings.provider, embModel: c.embeddings.model, embBaseUrl: c.embeddings.baseUrl,
           consProvider: c.consolidation.provider, consModel: c.consolidation.model, consBaseUrl: c.consolidation.baseUrl || '', consApiKey: '', consHasKey: c.consolidation.hasApiKey,
         });
+        setCustomModel({ emb: false, cons: false });
         loadModels('consolidation', c.consolidation.provider, c.consolidation.baseUrl || '');
         loadModels('embeddings', c.embeddings.provider, c.embeddings.baseUrl || '');
       }
@@ -1600,8 +1603,23 @@ export default function App() {
                 <>
                   <div className="form-group">
                     <label>Model {modelOptions.emb.length > 0 ? `(${modelOptions.emb.length} available)` : ''}</label>
-                    <input list="emb-models" value={cfgForm.embModel} onChange={(e) => setCfgForm({ ...cfgForm, embModel: e.target.value })} placeholder={cfgForm.embProvider === 'ollama' ? 'nomic-embed-text' : 'text-embedding-3-small'} />
-                    <datalist id="emb-models">{modelOptions.emb.map(m => <option key={m} value={m} />)}</datalist>
+                    {modelOptions.emb.length > 0 && !customModel.emb ? (
+                      <select
+                        value={modelOptions.emb.includes(cfgForm.embModel) ? cfgForm.embModel : '__current__'}
+                        onChange={(e) => {
+                          if (e.target.value === '__custom__') setCustomModel({ ...customModel, emb: true });
+                          else if (e.target.value !== '__current__') setCfgForm({ ...cfgForm, embModel: e.target.value });
+                        }}
+                      >
+                        {!modelOptions.emb.includes(cfgForm.embModel) && (
+                          <option value="__current__">{cfgForm.embModel ? `${cfgForm.embModel} (current)` : '(provider default)'}</option>
+                        )}
+                        {modelOptions.emb.map(m => <option key={m} value={m}>{m}</option>)}
+                        <option value="__custom__">Custom…</option>
+                      </select>
+                    ) : (
+                      <input value={cfgForm.embModel} onChange={(e) => setCfgForm({ ...cfgForm, embModel: e.target.value })} placeholder={cfgForm.embProvider === 'ollama' ? 'nomic-embed-text' : 'text-embedding-3-small'} />
+                    )}
                   </div>
                   <div className="form-group"><label>Base URL</label><input value={cfgForm.embBaseUrl} onChange={(e) => setCfgForm({ ...cfgForm, embBaseUrl: e.target.value })} placeholder={cfgForm.embProvider === 'ollama' ? 'http://localhost:11434' : 'https://api.openai.com/v1'} /></div>
                 </>
@@ -1621,8 +1639,23 @@ export default function App() {
               {cfgForm.consProvider !== 'none' && (
                 <div className="form-group">
                   <label>Model {modelOptions.cons.length > 0 ? `(${modelOptions.cons.length} available)` : ''}</label>
-                  <input list="cons-models" value={cfgForm.consModel} onChange={(e) => setCfgForm({ ...cfgForm, consModel: e.target.value })} placeholder={cfgForm.consProvider === 'openai' ? 'gpt-4o-mini / gemini-2.5-flash' : cfgForm.consProvider === 'ollama' ? 'llama3.2' : 'haiku'} />
-                  <datalist id="cons-models">{modelOptions.cons.map(m => <option key={m} value={m} />)}</datalist>
+                  {modelOptions.cons.length > 0 && !customModel.cons ? (
+                    <select
+                      value={modelOptions.cons.includes(cfgForm.consModel) ? cfgForm.consModel : '__current__'}
+                      onChange={(e) => {
+                        if (e.target.value === '__custom__') setCustomModel({ ...customModel, cons: true });
+                        else if (e.target.value !== '__current__') setCfgForm({ ...cfgForm, consModel: e.target.value });
+                      }}
+                    >
+                      {!modelOptions.cons.includes(cfgForm.consModel) && (
+                        <option value="__current__">{cfgForm.consModel ? `${cfgForm.consModel} (current)` : '(provider default)'}</option>
+                      )}
+                      {modelOptions.cons.map(m => <option key={m} value={m}>{m}</option>)}
+                      <option value="__custom__">Custom…</option>
+                    </select>
+                  ) : (
+                    <input value={cfgForm.consModel} onChange={(e) => setCfgForm({ ...cfgForm, consModel: e.target.value })} placeholder={cfgForm.consProvider === 'openai' ? 'gpt-4o-mini / gemini-2.5-flash' : cfgForm.consProvider === 'ollama' ? 'llama3.2' : 'haiku'} />
+                  )}
                 </div>
               )}
               {(cfgForm.consProvider === 'openai' || cfgForm.consProvider === 'ollama') && (
