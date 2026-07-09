@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AsterMind in mnemo — Machine Learning Inside the Memory System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700&family=Montserrat:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --mint:   #00e5b9;
+  --purple: #6c41f0;
+  --rose:   #d52e66;
+  --orange: #ff5926;
+  --green:  #00bd81;
+  --bg:     #050812;
+  --bg2:    #080d1e;
+  --navy:   #001769;
+  --line:   rgba(255,255,255,0.07);
+  --glass:  rgba(255,255,255,0.04);
+  --glass-border: rgba(255,255,255,0.09);
+  --purple-fg: #c4a8ff;
+  --rose-fg:   #ff99bb;
+  --orange-fg: #ffaa88;
+  --green-fg:  #5eefc0;
+}
+
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:#fff;font-family:'Merriweather',Georgia,serif;overflow-x:hidden;cursor:none;}
+h1,h2,h3,h4,.mono{font-family:'Montserrat',sans-serif;}
+
+/* CURSOR */
+#cur{position:fixed;width:8px;height:8px;background:var(--mint);border-radius:50%;pointer-events:none;z-index:9999;transform:translate(-50%,-50%);mix-blend-mode:screen;transition:width .2s,height .2s;}
+#curring{position:fixed;width:36px;height:36px;border:1px solid rgba(0,229,185,.3);border-radius:50%;pointer-events:none;z-index:9998;transform:translate(-50%,-50%);}
+#curglow{position:fixed;width:380px;height:380px;border-radius:50%;background:radial-gradient(circle,rgba(0,229,185,.055) 0%,transparent 65%);pointer-events:none;z-index:9997;transform:translate(-50%,-50%);transition:transform .9s cubic-bezier(.16,1,.3,1);}
+body:hover #cur{width:8px;height:8px;}
+a:hover~#cur,button:hover~#cur{width:14px;height:14px;}
+
+/* HERO */
+.hero{min-height:100vh;position:relative;display:flex;flex-direction:column;justify-content:center;padding:clamp(2.5rem,16vw,16rem) clamp(2.5rem,6vw,6rem) clamp(2.5rem,6vw,6rem);overflow:hidden;}
+#hcanvas{position:absolute;inset:0;width:100%;height:100%;}
+.hero-vig{position:absolute;inset:0;background:radial-gradient(ellipse at 62% 48%,transparent 25%,rgba(5,8,18,.8) 80%);pointer-events:none;}
+.hero-lbl{font-family:'Montserrat',sans-serif;font-size:clamp(.65rem,1.2vw,.8rem);font-weight:700;letter-spacing:.32em;text-transform:uppercase;color:var(--mint);display:flex;align-items:center;gap:.85rem;margin-bottom:1.7rem;opacity:0;animation:up 1.1s .4s cubic-bezier(.16,1,.3,1) forwards;}
+.hero-lbl::before{content:'';display:inline-block;width:18px;height:1px;background:var(--mint);}
+.hero h1{font-size:clamp(1.85rem,calc(.65rem + 10vw),12rem);font-weight:900;line-height:.98;letter-spacing:-.036em;opacity:0;animation:up 1.1s .65s cubic-bezier(.16,1,.3,1) forwards;position:relative;z-index:2;max-width:100%;}
+.h1-line{display:block;}
+.h1-grad{display:inline-block;background:linear-gradient(115deg,var(--mint) 0%,#7efff2 45%,var(--purple) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.h1-outline{-webkit-text-stroke:2px rgba(255,255,255,.45);-webkit-text-fill-color:transparent;}
+.hero-sub{margin-top:2.8rem;font-size:clamp(.88rem,1.7vw,1.12rem);line-height:1.88;max-width:48ch;color:rgba(255,255,255,.52);opacity:0;animation:up 1.1s .92s cubic-bezier(.16,1,.3,1) forwards;font-weight:300;}
+.hero-sh{margin-top:4rem;opacity:0;animation:up 1.1s 1.5s cubic-bezier(.16,1,.3,1) forwards;display:flex;align-items:center;gap:1rem;}
+.sh-track{width:48px;height:1px;background:rgba(255,255,255,.1);position:relative;overflow:hidden;}
+.sh-track::after{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,var(--mint),transparent);animation:scan 2.5s 2s infinite;}
+.sh-word{font-family:'Montserrat',sans-serif;font-size:.72rem;letter-spacing:.3em;text-transform:uppercase;color:rgba(255,255,255,.55);}
+.hero-yr{position:absolute;right:-.04em;bottom:-.08em;font-family:'Montserrat',sans-serif;font-size:clamp(12rem,28vw,38rem);font-weight:900;letter-spacing:-.07em;color:rgba(108,65,240,.025);line-height:1;pointer-events:none;user-select:none;opacity:0;animation:fo 2s 1.1s forwards;}
+
+@keyframes up{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}
+@keyframes fo{to{opacity:1}}
+@keyframes scan{to{left:200%}}
+
+/* TICKER */
+.tko{background:var(--purple);overflow:hidden;padding:.52rem 0;position:relative;z-index:10;}
+.tki{display:flex;white-space:nowrap;animation:tk 60s linear infinite;}
+.tki span{font-family:'Montserrat',sans-serif;font-weight:800;font-size:.62rem;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.88);padding:0 1.8rem;}
+.tki span.s{opacity:.3;padding:0 .35rem;}
+@keyframes tk{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+/* PROVOCATION */
+.prov{position:relative;min-height:80vh;display:flex;align-items:center;overflow:hidden;padding:clamp(5rem,10vw,10rem) clamp(1.5rem,6vw,6rem);}
+.prov::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 30% 60%,rgba(108,65,240,.12) 0%,transparent 55%),radial-gradient(ellipse at 75% 30%,rgba(0,229,185,.06) 0%,transparent 48%);pointer-events:none;}
+.prov-in{position:relative;z-index:2;max-width:1200px;}
+.prov-lbl{font-family:'Montserrat',sans-serif;font-size:.95rem;font-weight:700;letter-spacing:.3em;text-transform:uppercase;color:rgba(255,255,255,.35);margin-bottom:2.5rem;display:flex;align-items:center;gap:.8rem;}
+.prov-lbl::before{content:'';display:inline-block;width:16px;height:1px;background:currentColor;}
+.prov-q{font-size:clamp(1.65rem,calc(.85rem + 4.2vw),8rem);font-weight:900;line-height:1.1;letter-spacing:-.01em;max-width:100%;}
+.prov-q .l1{display:block;}
+.prov-q .l2{display:block;color:var(--mint);}
+.prov-q .l3{display:block;color:rgba(255,255,255,.32);font-size:.52em;font-weight:400;margin-top:.6em;font-family:'Merriweather',serif;}
+.prov-body{margin-top:4rem;max-width:680px;display:grid;grid-template-columns:1fr 1fr;gap:2.5rem;}
+.prov-body p{font-size:clamp(.83rem,1.35vw,1.02rem);line-height:1.95;color:rgba(255,255,255,.48);font-weight:300;}
+
+/* SECTION LABEL */
+.eye{font-family:'Montserrat',sans-serif;font-size:.90rem;font-weight:700;letter-spacing:.28em;text-transform:uppercase;color:var(--mint);display:flex;align-items:center;gap:.8rem;margin-bottom:1.5rem;}
+.eye::before{content:'';display:inline-block;width:16px;height:1px;background:var(--mint);}
+.eye.purple{color:var(--purple-fg);}
+.eye.purple::before{background:var(--purple-fg);}
+.eye.rose{color:var(--rose-fg);}
+.eye.rose::before{background:var(--rose-fg);}
+.eye.orange{color:var(--orange-fg);}
+.eye.orange::before{background:var(--orange-fg);}
+
+/* TWO TOOLS SPLIT */
+.tools{padding:clamp(5rem,10vw,10rem) clamp(1.5rem,6vw,6rem);max-width:1400px;margin:0 auto;}
+.tools-hd{margin-bottom:4rem;}
+.tools-hd h2{font-size:clamp(1.65rem,calc(.75rem + 3.8vw),5.5rem);font-weight:900;letter-spacing:-.02em;line-height:1.1;margin-top:1rem;}
+.tools-hd h2 em{font-style:normal;color:var(--mint);}
+.tools-hd p{margin-top:1.4rem;font-size:clamp(.85rem,1.35vw,1.02rem);line-height:1.9;color:rgba(255,255,255,.42);font-weight:300;max-width:58ch;}
+.tools-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--line);}
+.tool-card{background:var(--bg2);padding:clamp(2.5rem,4.5vw,4rem);position:relative;overflow:hidden;}
+.tool-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--tc,var(--mint));}
+.tool-badge{display:inline-flex;align-items:center;gap:.6rem;font-family:'Montserrat',sans-serif;font-size:.62rem;font-weight:800;letter-spacing:.22em;text-transform:uppercase;color:var(--tc,var(--mint));background:rgba(0,229,185,.07);border:1px solid rgba(0,229,185,.15);padding:.38rem .9rem;border-radius:2px;margin-bottom:1.8rem;}
+.tool-title{font-size:clamp(1.4rem,3vw,2.8rem);font-weight:900;letter-spacing:-.02em;line-height:1.1;margin-bottom:1rem;}
+.tool-sub{font-family:'Montserrat',sans-serif;font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.28);margin-bottom:1.5rem;}
+.tool-desc{font-size:clamp(.85rem,1.2vw,.98rem);line-height:1.95;color:rgba(255,255,255,.48);font-weight:300;margin-bottom:2rem;}
+.tool-detail{list-style:none;display:flex;flex-direction:column;gap:.7rem;}
+.tool-detail li{font-family:'Montserrat',sans-serif;font-size:.8rem;color:rgba(255,255,255,.38);line-height:1.7;display:flex;gap:.7rem;align-items:flex-start;}
+.tool-detail li::before{content:'→';color:var(--tc,var(--mint));flex-shrink:0;margin-top:.05em;}
+
+/* PRINCIPLES (accordion) */
+.prins{padding:clamp(4rem,8vw,8rem) 0;}
+.prins-hd{padding:0 clamp(1.5rem,6vw,6rem) 2.8rem;}
+.pstack{display:flex;flex-direction:column;border-top:1px solid var(--line);}
+.pcard{border-bottom:1px solid var(--line);position:relative;overflow:hidden;cursor:pointer;transition:background .5s;}
+.pcard::before{content:'';position:absolute;left:0;top:0;bottom:0;width:0;background:var(--pac,var(--mint));opacity:.055;transition:width .7s cubic-bezier(.16,1,.3,1);}
+.pcard.open::before,.pcard:hover::before{width:100%;}
+.pcard-h{display:grid;grid-template-columns:clamp(2.8rem,7.5vw,7.5rem) 1fr auto;align-items:center;padding:clamp(1.6rem,3.2vw,2.8rem) clamp(1.5rem,6vw,6rem);gap:2rem;position:relative;z-index:2;}
+.pnum{font-family:'Montserrat',sans-serif;font-size:clamp(1.6rem,3.8vw,4.8rem);font-weight:900;letter-spacing:-.05em;color:var(--pac,var(--mint));opacity:.35;line-height:1;transition:opacity .4s;}
+.pcard.open .pnum,.pcard:hover .pnum{opacity:1;}
+.ptitle{font-size:clamp(1.1rem,2.3vw,2.2rem);font-weight:900;letter-spacing:-.02em;line-height:1.08;margin-bottom:.4rem;}
+.psub{font-family:'Montserrat',sans-serif;font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.24);}
+.ptog{width:40px;height:40px;border:1px solid rgba(255,255,255,.12);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .45s cubic-bezier(.16,1,.3,1);font-size:1rem;color:rgba(255,255,255,.38);}
+.pcard.open .ptog{border-color:var(--pac,var(--mint));background:rgba(0,229,185,.07);color:var(--pac,var(--mint));transform:rotate(45deg);}
+.pbody{max-height:0;overflow:hidden;transition:max-height .75s cubic-bezier(.16,1,.3,1);}
+.pcard.open .pbody{max-height:900px;}
+.pbody-in{display:grid;grid-template-columns:1fr 1fr;gap:2.5rem;padding:0 clamp(1.5rem,6vw,6rem) clamp(1.6rem,3vw,2.8rem);padding-left:calc(clamp(2.8rem,7.5vw,7.5rem) + clamp(1.5rem,6vw,6rem) + 2rem);}
+.pdesc{font-size:clamp(.87rem,1.25vw,1.02rem);line-height:2;color:rgba(255,255,255,.52);font-weight:300;}
+.plist{list-style:none;display:flex;flex-direction:column;gap:.65rem;}
+.plist li{font-family:'Montserrat',sans-serif;font-size:.82rem;color:rgba(255,255,255,.38);line-height:1.7;display:flex;gap:.7rem;align-items:flex-start;}
+.plist li::before{content:'→';color:var(--pac,var(--mint));flex-shrink:0;margin-top:.05em;}
+
+/* CODE WINDOW */
+.codesec{padding:clamp(5rem,10vw,10rem) clamp(1.5rem,6vw,6rem);position:relative;overflow:hidden;}
+.codesec::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 84% 50%,rgba(108,65,240,.09) 0%,transparent 52%),radial-gradient(ellipse at 16% 50%,rgba(0,229,185,.045) 0%,transparent 52%);pointer-events:none;}
+.cgrid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(3rem,6vw,6rem);max-width:1300px;margin:0 auto;align-items:center;position:relative;z-index:2;}
+.ctxt h2{font-size:clamp(1.6rem,3.8vw,3.8rem);font-weight:900;letter-spacing:-.02em;line-height:1.15;margin-bottom:1.5rem;}
+.ctxt h2 em{font-style:normal;color:var(--mint);}
+.ctxt p{font-size:clamp(.83rem,1.28vw,.98rem);line-height:1.95;color:rgba(255,255,255,.48);font-weight:300;margin-bottom:.9rem;}
+.cframe{background:#09091f;border:1px solid rgba(255,255,255,.07);border-radius:6px;overflow:hidden;box-shadow:0 40px 80px rgba(0,0,0,.5);}
+.cbar{background:rgba(255,255,255,.03);padding:.62rem 1.1rem;display:flex;align-items:center;gap:.5rem;border-bottom:1px solid rgba(255,255,255,.05);}
+.dot{width:9px;height:9px;border-radius:50%;}
+.cnam{font-family:'Montserrat',sans-serif;font-size:.56rem;letter-spacing:.12em;color:rgba(255,255,255,.22);margin-left:.4rem;}
+.cbody{padding:1.55rem;font-family:'Courier New',monospace;font-size:.77rem;line-height:1.9;color:rgba(255,255,255,.72);overflow-x:auto;}
+.cbody pre{margin:0;}
+.cm{color:rgba(255,255,255,.22);}
+.ck{color:#a78bfa;}
+.cs{color:var(--mint);}
+.cv{color:#fbbf24;}
+.cn{color:var(--rose-fg);}
+.cp{color:var(--orange-fg);}
+.ci{color:#7dd3fc;}
+
+/* INTERACTIVE DEMO */
+.demo-sec{padding:clamp(5rem,10vw,10rem) clamp(1.5rem,6vw,6rem);background:linear-gradient(180deg,var(--bg) 0%,#070920 50%,var(--bg) 100%);position:relative;overflow:hidden;}
+.demo-sec::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 50%,rgba(108,65,240,.07) 0%,transparent 60%);pointer-events:none;}
+.demo-in{max-width:980px;margin:0 auto;position:relative;z-index:2;}
+.demo-in h2{font-size:clamp(1.6rem,3.8vw,3.8rem);font-weight:900;letter-spacing:-.02em;line-height:1.15;margin-bottom:.8rem;}
+.demo-in h2 em{font-style:normal;color:var(--purple-fg);}
+.demo-in > p{font-size:clamp(.85rem,1.3vw,1rem);line-height:1.9;color:rgba(255,255,255,.42);font-weight:300;max-width:60ch;margin-bottom:3rem;}
+.demo-frame{background:var(--bg2);border:1px solid var(--glass-border);border-radius:8px;overflow:hidden;box-shadow:0 40px 80px rgba(0,0,0,.4);}
+.demo-bar{background:rgba(255,255,255,.03);padding:.7rem 1.2rem;display:flex;align-items:center;gap:.5rem;border-bottom:1px solid var(--line);}
+.demo-title{font-family:'Montserrat',sans-serif;font-size:.6rem;letter-spacing:.15em;color:rgba(255,255,255,.25);text-transform:uppercase;margin-left:.5rem;}
+.demo-body{padding:2rem;}
+.demo-input-row{display:flex;gap:1rem;margin-bottom:1.5rem;}
+.demo-input{flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:.85rem 1.1rem;font-family:'Merriweather',serif;font-size:.88rem;color:#fff;outline:none;transition:border-color .25s;}
+.demo-input::placeholder{color:rgba(255,255,255,.24);}
+.demo-input:focus{border-color:rgba(108,65,240,.5);}
+.demo-btn{font-family:'Montserrat',sans-serif;font-size:.65rem;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:#050812;background:var(--mint);border:none;padding:.85rem 1.6rem;border-radius:4px;cursor:pointer;white-space:nowrap;transition:all .25s cubic-bezier(.16,1,.3,1);}
+.demo-btn:hover{background:#fff;transform:translateY(-2px);}
+.demo-output{display:none;flex-direction:column;gap:1.5rem;}
+.demo-output.show{display:flex;}
+.demo-step{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:6px;padding:1.2rem 1.4rem;}
+.demo-step-lbl{font-family:'Montserrat',sans-serif;font-size:.6rem;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.3);margin-bottom:.6rem;}
+.demo-step-lbl.mint{color:var(--mint);}
+.demo-step-lbl.purple{color:var(--purple-fg);}
+.demo-step-lbl.orange{color:var(--orange-fg);}
+.demo-step-val{font-family:'Courier New',monospace;font-size:.82rem;color:rgba(255,255,255,.72);word-break:break-all;line-height:1.7;}
+.vec-row{display:flex;gap:2px;flex-wrap:nowrap;overflow:hidden;height:32px;align-items:center;margin-top:.4rem;}
+.vec-bar{height:100%;min-width:3px;border-radius:1px;transition:height .3s;}
+.pred-result{display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap;margin-top:.4rem;}
+.pred-label{font-family:'Montserrat',sans-serif;font-size:1.2rem;font-weight:900;color:var(--mint);letter-spacing:-.02em;}
+.pred-meta{font-family:'Montserrat',sans-serif;font-size:.72rem;color:rgba(255,255,255,.35);line-height:1.7;}
+.pred-bar-row{width:100%;margin-top:.8rem;}
+.pred-bar-lbl{font-family:'Montserrat',sans-serif;font-size:.6rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.28);margin-bottom:.4rem;}
+.pred-bars{display:flex;flex-direction:column;gap:.4rem;}
+.pbar-row{display:flex;align-items:center;gap:.8rem;}
+.pbar-name{font-family:'Montserrat',sans-serif;font-size:.65rem;font-weight:700;color:rgba(255,255,255,.38);min-width:70px;}
+.pbar-track{flex:1;height:6px;background:rgba(255,255,255,.06);border-radius:3px;overflow:hidden;}
+.pbar-fill{height:100%;border-radius:3px;transition:width .5s cubic-bezier(.16,1,.3,1);}
+.pbar-pct{font-family:'Courier New',monospace;font-size:.62rem;color:rgba(255,255,255,.3);min-width:35px;text-align:right;}
+
+/* STATS */
+.stats-wrap{background:var(--bg2);}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);border-bottom:1px solid var(--line);}
+.stat{padding:clamp(2.5rem,5vw,5rem) clamp(1.5rem,4vw,4rem);border-right:1px solid var(--line);position:relative;overflow:hidden;}
+.stat:last-child{border-right:none;}
+.stat::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--sac);transform:scaleX(0);transform-origin:left;transition:transform .9s cubic-bezier(.16,1,.3,1);}
+.stat.vis::after{transform:scaleX(1);}
+.snum{font-family:'Montserrat',sans-serif;font-size:clamp(2.5rem,5vw,5.5rem);font-weight:900;letter-spacing:-.055em;line-height:1;background:var(--sac);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.slbl{margin-top:.6rem;font-family:'Montserrat',sans-serif;font-size:clamp(.7rem,1vw,.82rem);font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.28);line-height:1.6;}
+
+/* TRUTHS */
+.truths{position:relative;padding:clamp(5rem,10vw,10rem) clamp(1.5rem,6vw,6rem);overflow:hidden;}
+.truths-wm{position:absolute;right:-.04em;top:50%;transform:translateY(-50%);font-family:'Montserrat',sans-serif;font-size:clamp(12rem,28vw,38rem);font-weight:900;letter-spacing:-.07em;color:rgba(0,229,185,.015);line-height:1;pointer-events:none;user-select:none;}
+.truths-in{max-width:1000px;position:relative;z-index:2;}
+.titem{padding:clamp(1.7rem,2.8vw,2.8rem) 0;border-bottom:1px solid var(--line);display:grid;grid-template-columns:clamp(3rem,6.5vw,6.5rem) 1fr;gap:2.5rem;align-items:start;opacity:0;transform:translateX(-28px);transition:opacity .7s ease,transform .7s ease;}
+.titem.vis{opacity:1;transform:none;}
+.tnum{font-family:'Montserrat',sans-serif;font-size:clamp(2.2rem,4.5vw,5.5rem);font-weight:900;letter-spacing:-.05em;color:rgba(255,255,255,.55);line-height:1;}
+.tttl{font-size:clamp(1rem,1.9vw,1.6rem);font-weight:800;line-height:1.2;margin-bottom:.75rem;letter-spacing:-.015em;}
+.tbody{font-size:clamp(.82rem,1.18vw,.96rem);line-height:1.95;color:rgba(255,255,255,.42);font-weight:300;max-width:60ch;}
+
+/* PROVIDER COMPARISON TABLE */
+.compare-sec{padding:clamp(5rem,10vw,10rem) clamp(1.5rem,6vw,6rem);}
+.compare-sec h2{font-size:clamp(1.6rem,3.5vw,3.8rem);font-weight:900;letter-spacing:-.02em;margin-bottom:.8rem;}
+.compare-sec h2 em{font-style:normal;color:var(--orange-fg);}
+.compare-sec > p{font-size:clamp(.85rem,1.3vw,1rem);line-height:1.9;color:rgba(255,255,255,.42);font-weight:300;max-width:58ch;margin-bottom:3rem;}
+.ctable{width:100%;border-collapse:collapse;font-size:clamp(.78rem,1.1vw,.9rem);}
+.ctable th{font-family:'Montserrat',sans-serif;font-size:.65rem;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.3);padding:.9rem 1.1rem;text-align:left;border-bottom:1px solid var(--line);}
+.ctable td{padding:.95rem 1.1rem;border-bottom:1px solid rgba(255,255,255,.04);line-height:1.6;color:rgba(255,255,255,.55);vertical-align:top;}
+.ctable tr:hover td{background:rgba(255,255,255,.016);}
+.ctable .prov-name{font-family:'Montserrat',sans-serif;font-weight:800;font-size:.82rem;}
+.ctable .prov-name.active{color:var(--mint);}
+.ctable .badge{display:inline-block;font-family:'Montserrat',sans-serif;font-size:.55rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;padding:.22rem .6rem;border-radius:2px;margin-left:.5rem;vertical-align:middle;}
+.badge-on{background:rgba(0,229,185,.12);color:var(--mint);border:1px solid rgba(0,229,185,.25);}
+.badge-off{background:rgba(255,255,255,.05);color:rgba(255,255,255,.28);border:1px solid rgba(255,255,255,.08);}
+.badge-mid{background:rgba(108,65,240,.12);color:var(--purple-fg);border:1px solid rgba(108,65,240,.25);}
+.check{color:var(--mint);}
+.cross{color:rgba(255,255,255,.2);}
+
+/* CULTURE (quirks) */
+.cult{padding:clamp(5rem,10vw,10rem) clamp(1.5rem,6vw,6rem);background:linear-gradient(135deg,var(--bg2) 0%,#0b0821 50%,var(--bg2) 100%);position:relative;overflow:hidden;}
+.cult::after{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(108,65,240,.065) 0%,transparent 58%);pointer-events:none;}
+.cult-in{max-width:1300px;margin:0 auto;position:relative;z-index:2;}
+.cult-h{font-size:clamp(1.65rem,calc(.75rem + 3.8vw),6rem);font-weight:900;letter-spacing:-.02em;line-height:1.15;margin-bottom:4.5rem;}
+.cult-h em{font-style:normal;color:var(--rose-fg);}
+.cgr{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;background:var(--line);}
+.ccol{background:var(--bg2);padding:clamp(1.8rem,3.2vw,2.8rem);position:relative;}
+.ccol::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--cac);}
+.clbl{font-family:'Montserrat',sans-serif;font-size:.75rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase;margin-bottom:1.6rem;padding-bottom:1.1rem;border-bottom:1px solid var(--line);color:var(--cac);}
+.ccol p{font-size:clamp(.85rem,1.1vw,.95rem);line-height:1.85;color:rgba(255,255,255,.45);font-weight:300;margin-bottom:1rem;}
+.ccol p:last-child{margin-bottom:0;}
+
+/* CLOSING */
+.closing{min-height:88vh;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;text-align:center;}
+#ccanvas{position:absolute;inset:0;width:100%;height:100%;}
+.clos-in{position:relative;z-index:2;padding:clamp(3rem,8vw,8rem) clamp(1.5rem,6vw,6rem);max-width:900px;}
+.clos-eye{font-family:'Montserrat',sans-serif;font-size:.75rem;font-weight:700;letter-spacing:.3em;text-transform:uppercase;color:rgba(255,255,255,.22);margin-bottom:2.5rem;}
+.clos-h{font-size:clamp(1.65rem,calc(.75rem + 4.5vw),7rem);font-weight:900;letter-spacing:-.02em;line-height:1.15;margin-bottom:2.5rem;}
+.clos-h em{font-style:normal;display:block;color:var(--mint);}
+.clos-p{font-size:clamp(.88rem,1.55vw,1.12rem);line-height:1.95;color:rgba(255,255,255,.48);font-weight:300;max-width:50ch;margin:0 auto 3rem;}
+.cta{display:inline-flex;align-items:center;gap:.8rem;font-family:'Montserrat',sans-serif;font-size:.68rem;font-weight:800;letter-spacing:.22em;text-transform:uppercase;color:#050812;background:var(--mint);padding:1.1rem 2.2rem;text-decoration:none;border-radius:2px;transition:all .3s cubic-bezier(.16,1,.3,1);}
+.cta:hover{background:#fff;transform:translateY(-3px);box-shadow:0 20px 40px rgba(0,229,185,.2);}
+
+/* FOOTER */
+footer{padding:2.4rem clamp(1.5rem,6vw,6rem);border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;}
+.fmk{font-family:'Montserrat',sans-serif;font-weight:900;font-size:.8rem;letter-spacing:.18em;color:rgba(255,255,255,.18);text-decoration:none;text-transform:uppercase;transition:color .25s;}
+.fmk:hover{color:var(--mint);}
+footer p{font-family:'Montserrat',sans-serif;font-size:.58rem;color:rgba(255,255,255,.14);letter-spacing:.1em;}
+
+/* REVEAL */
+.r{opacity:0;transform:translateY(26px);transition:opacity .8s ease,transform .8s cubic-bezier(.16,1,.3,1);}
+.r.vis{opacity:1;transform:none;}
+.rl{opacity:0;transform:translateX(-28px);transition:opacity .75s ease,transform .75s cubic-bezier(.16,1,.3,1);}
+.rl.vis{opacity:1;transform:none;}
+
+/* NOISE */
+body::after{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");opacity:.016;pointer-events:none;z-index:99999;}
+
+@media(max-width:900px){
+  .tools-grid,.cgrid,.cgr{grid-template-columns:1fr;}
+  .stats{grid-template-columns:repeat(2,1fr);}
+  .stat{border-right:none;border-bottom:1px solid var(--line);}
+  .pbody-in{grid-template-columns:1fr;padding-left:clamp(1.5rem,6vw,6rem);}
+  .prov-body{grid-template-columns:1fr;}
+  .pcard-h{grid-template-columns:clamp(2.5rem,5.5vw,5rem) 1fr auto;}
+  .demo-input-row{flex-direction:column;}
+}
+@media(max-width:600px){
+  .stats{grid-template-columns:1fr;}
+  .titem{grid-template-columns:2.8rem 1fr;gap:1rem;}
+}
+</style>
+</head>
+<body>
+
+<div id="cur"></div>
+<div id="curring"></div>
+<div id="curglow"></div>
+
+<!-- ═══════════════════════════════════════════
+     HERO
+═══════════════════════════════════════════ -->
+<section class="hero" id="hero">
+  <canvas id="hcanvas"></canvas>
+  <div class="hero-vig"></div>
+  <div class="hero-yr">ELM</div>
+
+  <div class="hero-lbl">mnemo × AsterMind</div>
+  <h1>
+    <span class="h1-line">Machine</span>
+    <span class="h1-line h1-grad">Learning,</span>
+    <span class="h1-line h1-outline">Local.</span>
+  </h1>
+  <p class="hero-sub">mnemo uses AsterMind's npm package to run two distinct ML tools directly on your device — no cloud, no API key, no model download required. This is how we taught mnemo to understand its own memories.</p>
+  <div class="hero-sh">
+    <div class="sh-track"></div>
+    <span class="sh-word">Scroll to explore</span>
+  </div>
+</section>
+
+<!-- TICKER -->
+<div class="tko">
+  <div class="tki">
+    <span>TF-IDF Vectorizer</span><span class="s">·</span><span>Extreme Learning Machines</span><span class="s">·</span><span>On-device inference</span><span class="s">·</span><span>No API key required</span><span class="s">·</span><span>Memory type classification</span><span class="s">·</span><span>Corpus embeddings</span><span class="s">·</span><span>Closed-form training</span><span class="s">·</span><span>Ridge regression</span><span class="s">·</span><span>Zero cloud dependency</span><span class="s">·</span><span>TF-IDF Vectorizer</span><span class="s">·</span><span>Extreme Learning Machines</span><span class="s">·</span><span>On-device inference</span><span class="s">·</span><span>No API key required</span><span class="s">·</span><span>Memory type classification</span><span class="s">·</span><span>Corpus embeddings</span><span class="s">·</span><span>Closed-form training</span><span class="s">·</span><span>Ridge regression</span><span class="s">·</span><span>Zero cloud dependency</span><span class="s">·</span>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     PROVOCATION
+═══════════════════════════════════════════ -->
+<section class="prov" id="what">
+  <div class="prov-in">
+    <p class="prov-lbl r">One package. Two tools.</p>
+    <h2 class="prov-q r" style="transition-delay:.12s">
+      <span class="l1">mnemo doesn't just</span>
+      <span class="l2">store memories.</span>
+      <span class="l3">It learns from them — right on your machine, every time you consolidate.</span>
+    </h2>
+    <div class="prov-body r" style="transition-delay:.28s">
+      <p>The <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--mint);">@astermind/astermind-elm</code> package gives mnemo two complementary capabilities: a <strong>TF-IDF vectorizer</strong> that turns memory text into numbers your computer can compare, and an <strong>Extreme Learning Machine</strong> that classifies what kind of memory something is.</p>
+      <p>Both run entirely in Node.js — the same process as the rest of mnemo. No model files to download, no GPU required, no network request. Fast enough to run during a dream cycle without you noticing.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     THE TWO TOOLS
+═══════════════════════════════════════════ -->
+<section id="tools">
+  <div class="tools">
+    <div class="tools-hd r">
+      <div class="eye">What's in the package</div>
+      <h2>Two tools.<br><em>Both running locally.</em></h2>
+      <p>mnemo installs <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--mint);">@astermind/astermind-elm</code> as its only ML dependency. Inside that package are the two pieces below — and mnemo uses exactly one from each.</p>
+    </div>
+    <div class="tools-grid r" style="transition-delay:.15s">
+      <div class="tool-card" style="--tc:var(--mint);">
+        <div class="tool-badge">Tool 1 — Embeddings</div>
+        <div class="tool-title">TFIDFVectorizer</div>
+        <div class="tool-sub">Term Frequency – Inverse Document Frequency</div>
+        <p class="tool-desc">Converts a piece of text into a fixed-length list of numbers by measuring how important each word is — both within that specific document and across your entire memory collection. Words that appear everywhere (like "the") get low weight. Words unique to a memory (like "Ollama") get high weight. The result is a <strong>vector</strong>: a precise numeric fingerprint of the content.</p>
+        <ul class="tool-detail">
+          <li>Built-in stemming: "containers" and "container" map to the same token</li>
+          <li>Bigrams: captures "cold start" as a phrase, not just two separate words</li>
+          <li>L2-normalized: all vectors have the same length, so cosine similarity is a clean 0→1</li>
+          <li>Vocabulary capped at 1024 tokens — deterministic across runs</li>
+          <li>Refitted on the whole store every dream cycle (corpus-consistent vectors)</li>
+        </ul>
+      </div>
+      <div class="tool-card" style="--tc:var(--purple-fg);">
+        <div class="tool-badge" style="background:rgba(108,65,240,.08);border-color:rgba(108,65,240,.2);color:var(--purple-fg);">Tool 2 — Classification</div>
+        <div class="tool-title">ELM</div>
+        <div class="tool-sub">Extreme Learning Machine</div>
+        <p class="tool-desc">A one-hidden-layer neural network with a twist: the hidden weights are <em>randomly set and never adjusted</em>. Only the output layer is trained — and that's just linear algebra (ridge regression). This makes training almost instant (milliseconds, not minutes), completely deterministic with a fixed seed, and surprisingly accurate for small datasets with clear patterns.</p>
+        <ul class="tool-detail">
+          <li>Random hidden weights (frozen) + learned output weights (ridge regression)</li>
+          <li>Trains in milliseconds on a store with hundreds of memories</li>
+          <li>Closed-form solution: no gradient descent, no learning rate tuning</li>
+          <li>Seeded for reproducibility — same data, same model, every time</li>
+          <li>Outputs a softmax probability over all 6 memory types</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     WHERE IN MNEMO (accordion)
+═══════════════════════════════════════════ -->
+<section class="prins" id="where">
+  <div class="prins-hd">
+    <div class="eye r">Where each tool lives in mnemo</div>
+    <h2 class="r" style="font-size:clamp(1.6rem,3.8vw,4rem);font-weight:900;letter-spacing:-.02em;line-height:1.1;margin-top:.8rem;transition-delay:.1s">Two places.<br>Two jobs.<br>Zero overlap.</h2>
+  </div>
+
+  <div class="pstack">
+
+    <!-- TFIDF -->
+    <div class="pcard" style="--pac:var(--mint);">
+      <div class="pcard-h">
+        <div class="pnum">01</div>
+        <div>
+          <div class="ptitle">TFIDFVectorizer → astermind embedding provider</div>
+          <div class="psub">packages/core/src/rag/astermind.ts · runs during dream()</div>
+        </div>
+        <div class="ptog">+</div>
+      </div>
+      <div class="pbody">
+        <div class="pbody-in">
+          <div class="pdesc">When you set <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--mint);">embeddings.provider = "astermind"</code> in your config, mnemo uses the TFIDFVectorizer as its vector embedding engine. During every dream cycle, it reads every memory from the store, fits a fresh vectorizer on that entire corpus, then re-embeds and stores every memory's vector as a SQLite BLOB.<br><br>At query time (when you search), the same persisted vectorizer is loaded and used to embed your search query — guaranteeing that query vectors and index vectors live in the same mathematical space.<br><br>This is the "astermind" alternative to using Ollama's nomic-embed-text. It's faster and requires zero extra setup, but captures lexical similarity only — not the semantic relationships a transformer model understands.</div>
+          <ul class="plist">
+            <li>Config: <code style="font-family:'Courier New',monospace;font-size:.85em;">embeddings.provider = "astermind"</code></li>
+            <li>Runs in: <code style="font-family:'Courier New',monospace;font-size:.85em;">fitAndEncodeCorpus(store)</code></li>
+            <li>Called from: <code style="font-family:'Courier New',monospace;font-size:.85em;">encodeForDream()</code> inside <code style="font-family:'Courier New',monospace;font-size:.85em;">dream()</code></li>
+            <li>Persists to: <code style="font-family:'Courier New',monospace;font-size:.85em;">~/.mnemo/astermind-model.json</code></li>
+            <li>Query path: <code style="font-family:'Courier New',monospace;font-size:.85em;">astermindEmbed([query])</code></li>
+            <li>Fallback: cosine returns 0 on dim mismatch → gracefully falls back to BM25 only</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ELM -->
+    <div class="pcard" style="--pac:var(--purple-fg);">
+      <div class="pcard-h">
+        <div class="pnum">02</div>
+        <div>
+          <div class="ptitle">ELM → memory type classifier</div>
+          <div class="psub">packages/core/src/ml/elm-classifier.ts · runs on dream() + remember()</div>
+        </div>
+        <div class="ptog">+</div>
+      </div>
+      <div class="pbody">
+        <div class="pbody-in">
+          <div class="pdesc">The ELM classifies what kind of memory a piece of text represents: <em>user preference, feedback, project context, reference, episodic (event), or semantic (concept)</em>. It's trained during every dream cycle using the existing memories in your store as labeled training data. The model is persisted to disk and loaded on subsequent <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--purple-fg);">remember()</code> calls.<br><br>When you call <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--purple-fg);">remember</code> without specifying a type, the ELM runs your content through the trained classifier. If it's confident enough (measured by the margin between the top class and the runner-up), it annotates the response with its suggestion — which the calling agent can accept or override.<br><br>The model is never trusted silently: it only persists if it beats the majority-class baseline on a held-out validation set.</div>
+          <ul class="plist">
+            <li>Config: <code style="font-family:'Courier New',monospace;font-size:.85em;">ml.typeSuggest.enabled = true</code></li>
+            <li>Trains in: <code style="font-family:'Courier New',monospace;font-size:.85em;">trainTypeClassifier(store)</code> during dream</li>
+            <li>Predicts in: <code style="font-family:'Courier New',monospace;font-size:.85em;">suggestType(content)</code> on remember</li>
+            <li>Persists to: <code style="font-family:'Courier New',monospace;font-size:.85em;">~/.mnemo/elm-type-classifier.json</code></li>
+            <li>Gating: margin-based (top prob − runner-up), not raw confidence</li>
+            <li>Safety: model only saved if it beats always-"project" baseline + 5% edge</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SILENCED -->
+    <div class="pcard" style="--pac:var(--rose-fg);">
+      <div class="pcard-h">
+        <div class="pnum">03</div>
+        <div>
+          <div class="ptitle">The silenced() wrapper — a quiet fix for a loud problem</div>
+          <div class="psub">packages/core/src/ml/persist.ts · wraps every AsterMind call</div>
+        </div>
+        <div class="ptog">+</div>
+      </div>
+      <div class="pbody">
+        <div class="pbody-in">
+          <div class="pdesc">The AsterMind library logs diagnostic messages to <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--rose-fg);">console.log</code> and <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--rose-fg);">console.error</code> during construction, training, and prediction. Normally that's harmless. But mnemo runs as an MCP (Model Context Protocol) server — a process where stdout must be exclusively clean JSON-RPC messages. A single stray log line corrupts the protocol stream, causing the host (Claude, Cursor, etc.) to disconnect.<br><br>The solution is <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--rose-fg);">silenced(fn)</code>: a tiny wrapper that temporarily replaces <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--rose-fg);">console.log</code> and <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--rose-fg);">console.error</code> with no-ops, calls the function, then restores them — whether or not the function throws. Every AsterMind call in mnemo goes through this wrapper. It's six call sites, all wrapped, no exceptions.</div>
+          <ul class="plist">
+            <li>Problem: AsterMind logs to stdout → corrupts MCP stdio JSON-RPC stream</li>
+            <li>Fix: swap console.log/error to no-ops → call fn → restore, even on throw</li>
+            <li>Wraps: TFIDFVectorizer construction, vectorize, ELM construction, trainFromData, loadModelFromJSON, predictProbaFromVector</li>
+            <li>Location: <code style="font-family:'Courier New',monospace;font-size:.85em;">persist.ts:silenced()</code> — 6 active call sites</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     CODE — DATA FLOW
+═══════════════════════════════════════════ -->
+<section class="codesec" id="dataflow">
+  <div class="cgrid">
+    <div class="ctxt r">
+      <div class="eye">The dream() pipeline</div>
+      <h2>Every night,<br><em>mnemo learns.</em></h2>
+      <p>When you trigger a consolidation ("dream"), AsterMind runs in two back-to-back passes: first the TFIDFVectorizer refits on all your memories and stores their embeddings; then the ELM trains a fresh type classifier on those same memories. Both happen before any deduplication or cross-linking begins.</p>
+      <p>The ELM model is only written to disk if it performs better than the naïve baseline on a held-out slice of your data. If your store is too small, or too single-category, the model stays dark — which is the correct outcome.</p>
+    </div>
+    <div class="cframe r" style="transition-delay:.18s">
+      <div class="cbar">
+        <div class="dot" style="background:#ff5f57;"></div>
+        <div class="dot" style="background:#febc2e;"></div>
+        <div class="dot" style="background:#28c840;"></div>
+        <span class="cnam">dream.ts</span>
+      </div>
+      <div class="cbody"><pre><span class="cm">// dream() — runs during consolidation</span>
+
+<span class="cm">// 1. Encode all memories into vectors</span>
+<span class="ck">await</span> <span class="ci">encodeForDream</span>(store, memories)
+  <span class="cm">// → if provider === 'astermind':</span>
+  <span class="cm">//   fitAndEncodeCorpus(store, maxVocab)</span>
+  <span class="cm">//   silenced(() => new TFIDFVectorizer(docs))</span>
+  <span class="cm">//   writes vectors to SQLite BLOBs</span>
+  <span class="cm">//   saves ~/.mnemo/astermind-model.json</span>
+
+<span class="cm">// 2. Train ELM type classifier</span>
+<span class="ck">if</span> (config.ml?.typeSuggest?.enabled) {
+  <span class="ck">const</span> report = <span class="ci">trainTypeClassifier</span>(store)
+  <span class="cm">// → gets all memories as labeled samples</span>
+  <span class="cm">// → 80/20 train/holdout split (seeded)</span>
+  <span class="cm">// → silenced(() => elm.trainFromData(X, Y))</span>
+  <span class="cm">// → only saves if accuracy > baseline+5%</span>
+  <span class="cm">// → writes ~/.mnemo/elm-type-classifier.json</span>
+}
+
+<span class="cm">// 3. NREM dedup, REM cross-link…</span>
+<span class="ck">await</span> <span class="ci">runNREM</span>(store, graph, memories)
+<span class="ck">await</span> <span class="ci">runREM</span>(store, graph, memories)</pre></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     CODE — REMEMBER FLOW
+═══════════════════════════════════════════ -->
+<section class="codesec" id="remember" style="padding-top:0;">
+  <div class="cgrid" style="direction:rtl;">
+    <div class="ctxt r" style="direction:ltr;">
+      <div class="eye purple">The remember() path</div>
+      <h2>Every memory you<br><em>store, classified.</em></h2>
+      <p>When an AI agent calls <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--purple-fg);">remember(content)</code> without specifying a type, mnemo runs <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--purple-fg);">suggestType()</code>. This loads the persisted ELM, embeds the new content, and asks the model what category it belongs to.</p>
+      <p>If the ELM is confident enough (the margin between top and runner-up exceeds a threshold), the suggestion is used and the agent is told. If it's a near-tie — or there's no trained model yet — mnemo quietly defaults to <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--purple-fg);">"project"</code>. The agent can always override.</p>
+    </div>
+    <div class="cframe r" style="transition-delay:.18s;direction:ltr;">
+      <div class="cbar">
+        <div class="dot" style="background:#ff5f57;"></div>
+        <div class="dot" style="background:#febc2e;"></div>
+        <div class="dot" style="background:#28c840;"></div>
+        <span class="cnam">write.ts · suggestType()</span>
+      </div>
+      <div class="cbody"><pre><span class="cm">// remember(content) — called by AI agent</span>
+
+<span class="ck">let</span> finalType = type <span class="cm">// undefined if omitted</span>
+
+<span class="ck">if</span> (!finalType && config.ml?.typeSuggest?.enabled) {
+  <span class="ck">const</span> suggested = <span class="ck">await</span> <span class="ci">suggestType</span>(content)
+  <span class="cm">// → loadElmClassifier(persisted JSON)</span>
+  <span class="cm">// → embedText([content]) via configured provider</span>
+  <span class="cm">// → silenced(() => elm.predictProbaFromVector(vec))</span>
+  <span class="cm">// → {label, confidence, margin, proba}</span>
+  <span class="cm">// → null if margin < minMargin threshold</span>
+
+  <span class="ck">if</span> (suggested) {
+    finalType = suggested.type
+    note += <span class="cs">`Type inferred as \`</span><span class="cv">${suggested.type}</span><span class="cs">\`</span>
+            <span class="cs"> (margin </span><span class="cv">${suggested.margin.toFixed(2)}</span><span class="cs">)</span>
+            <span class="cs"> — pass \`type\` to override.\``</span>
+  }
+}
+
+finalType ??= <span class="cs">'project'</span> <span class="cm">// safe default</span>
+store.create({ content, type: finalType, … })</pre></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     INTERACTIVE DEMO
+═══════════════════════════════════════════ -->
+<section class="demo-sec" id="demo">
+  <div class="demo-in">
+    <div class="eye purple r">Live simulation</div>
+    <h2 class="r" style="transition-delay:.1s">See the ELM<br><em>classify a memory.</em></h2>
+    <p class="r" style="transition-delay:.2s">Type any text below and see a simulation of what the ELM type classifier does: convert text to a feature vector, then predict which of mnemo's six memory types it most likely represents.</p>
+
+    <div class="demo-frame r" style="transition-delay:.3s;">
+      <div class="demo-bar">
+        <div class="dot" style="background:#ff5f57;"></div>
+        <div class="dot" style="background:#febc2e;"></div>
+        <div class="dot" style="background:#28c840;"></div>
+        <span class="demo-title">mnemo ELM type classifier — simulation</span>
+      </div>
+      <div class="demo-body">
+        <div class="demo-input-row">
+          <input class="demo-input" id="demoInput" type="text" placeholder="e.g. always run tests before pushing to main…" maxlength="200">
+          <button class="demo-btn" id="demoBtn">Classify →</button>
+        </div>
+        <div class="demo-output" id="demoOutput">
+          <div class="demo-step">
+            <div class="demo-step-lbl mint">Step 1 — Tokenize &amp; vectorize</div>
+            <div class="demo-step-val" id="demoTokens">—</div>
+            <div class="vec-row" id="demoVec"></div>
+          </div>
+          <div class="demo-step">
+            <div class="demo-step-lbl purple">Step 2 — ELM predict (simulated)</div>
+            <div class="pred-result">
+              <div>
+                <div style="font-family:'Montserrat',sans-serif;font-size:.6rem;letter-spacing:.15em;text-transform:uppercase;color:rgba(255,255,255,.28);margin-bottom:.3rem;">Predicted type</div>
+                <div class="pred-label" id="predLabel">—</div>
+              </div>
+              <div class="pred-meta" id="predMeta">—</div>
+            </div>
+            <div class="pred-bar-row">
+              <div class="pred-bar-lbl">Confidence distribution (simulated softmax)</div>
+              <div class="pred-bars" id="predBars"></div>
+            </div>
+          </div>
+          <div class="demo-step">
+            <div class="demo-step-lbl orange">Step 3 — Gate decision</div>
+            <div class="demo-step-val" id="predGate">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     STATS
+═══════════════════════════════════════════ -->
+<div class="stats-wrap">
+  <div class="stats">
+    <div class="stat" style="--sac:linear-gradient(135deg,var(--mint),var(--green));">
+      <div class="snum">~45ms</div>
+      <div class="slbl">ELM training time<br>on 100 memories</div>
+    </div>
+    <div class="stat" style="--sac:linear-gradient(135deg,var(--purple),#a78bfa);">
+      <div class="snum">6</div>
+      <div class="slbl">Memory types the<br>classifier recognizes</div>
+    </div>
+    <div class="stat" style="--sac:linear-gradient(135deg,var(--orange),var(--rose));">
+      <div class="snum">0</div>
+      <div class="slbl">Cloud calls made<br>by AsterMind</div>
+    </div>
+    <div class="stat" style="--sac:linear-gradient(135deg,var(--rose-fg),var(--purple-fg));">
+      <div class="snum">80/20</div>
+      <div class="slbl">Train/holdout split<br>for validation</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     QUIRKS — THREE COLUMNS
+═══════════════════════════════════════════ -->
+<section class="cult" id="quirks">
+  <div class="cult-in">
+    <div class="eye rose r">Things we discovered the hard way</div>
+    <h2 class="cult-h r" style="transition-delay:.1s">Quirks &amp; surprises<br>from <em>real use.</em></h2>
+    <div class="cgr r" style="transition-delay:.2s;">
+      <div class="ccol" style="--cac:var(--rose-fg);">
+        <div class="clbl">The stdout problem</div>
+        <p>AsterMind's library logs to <code style="font-family:'Courier New',monospace;font-size:.9em;">console.log</code> on every constructor, training run, and model load. In a normal Node app, this is harmless noise. In an MCP stdio server, it's fatal: a single stray line corrupts the JSON-RPC protocol and disconnects your AI host.</p>
+        <p>The fix is <code style="font-family:'Courier New',monospace;font-size:.9em;">silenced(fn)</code> — six lines of code that swap console methods to no-ops, call the function, and restore them. Every single AsterMind call site in mnemo is wrapped. No exceptions. Missing one breaks the MCP connection.</p>
+      </div>
+      <div class="ccol" style="--cac:var(--orange-fg);">
+        <div class="clbl">The confidence calibration quirk</div>
+        <p>The ELM's softmax output is systematically underconfident. Even when the model classifies correctly at 98% accuracy on the holdout set, the raw top probability rarely exceeds 0.35. If you gate on "confidence &gt; 0.75," the ELM never fires — ever — even when it's right.</p>
+        <p>The fix: use <strong>margin</strong> (top probability minus runner-up probability) instead of raw confidence. A margin of 0.10 separates a decisive prediction from a near-tie, and it's well-calibrated for this model even though absolute confidence is not. The threshold that worked in practice: <code style="font-family:'Courier New',monospace;font-size:.9em;">minMargin = 0.1</code>.</p>
+      </div>
+      <div class="ccol" style="--cac:var(--purple-fg);">
+        <div class="clbl">Corpus consistency</div>
+        <p>The TFIDFVectorizer must be fitted on the same corpus of documents at both index time (when memory embeddings are written) and query time (when your search is vectorized). If you add new memories and re-embed without refitting the vectorizer, the new vectors live in a slightly different space.</p>
+        <p>mnemo handles this by refitting on the entire store during every dream cycle — not just the new memories. It's more work per dream, but it guarantees that all stored vectors and every future query use the same vocabulary and IDF weights. Dimension mismatch (from a refit mid-session) gracefully falls back to BM25-only retrieval.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     PROVIDER COMPARISON
+═══════════════════════════════════════════ -->
+<section class="compare-sec" id="providers">
+  <div style="max-width:1300px;margin:0 auto;">
+    <div class="eye orange r">Embedding provider comparison</div>
+    <h2 class="r" style="transition-delay:.1s;">Where does <em>astermind</em> fit?</h2>
+    <p class="r" style="transition-delay:.2s;">mnemo supports four embedding providers. AsterMind's TFIDFVectorizer sits in the middle: faster and simpler than a transformer model, richer than a pure hashing function.</p>
+    <div class="r" style="transition-delay:.3s;overflow-x:auto;">
+      <table class="ctable">
+        <thead>
+          <tr>
+            <th>Provider</th>
+            <th>Algorithm</th>
+            <th>Dim</th>
+            <th>Speed</th>
+            <th>Quality</th>
+            <th>Requires</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="prov-name">none</span></td>
+            <td>BM25 only (no vectors)</td>
+            <td>—</td>
+            <td>Instant</td>
+            <td>Keyword match only</td>
+            <td>Nothing</td>
+          </tr>
+          <tr>
+            <td><span class="prov-name">local</span></td>
+            <td>FNV-1a feature hashing + bigrams + L2</td>
+            <td>256</td>
+            <td>Instant</td>
+            <td>Lexical (fuzzy)</td>
+            <td>Nothing <span class="badge badge-on">built-in</span></td>
+          </tr>
+          <tr>
+            <td><span class="prov-name active">astermind</span><span class="badge badge-mid">TF-IDF</span></td>
+            <td>TFIDFVectorizer + stemming + bigrams + L2</td>
+            <td>256–1024</td>
+            <td>Fast (~ms)</td>
+            <td>Lexical + corpus-adaptive</td>
+            <td><code style="font-family:'Courier New',monospace;font-size:.85em;">@astermind/astermind-elm</code></td>
+          </tr>
+          <tr>
+            <td><span class="prov-name" style="color:var(--green-fg);">ollama</span><span class="badge badge-on">active</span></td>
+            <td>Transformer (nomic-embed-text, 12-layer)</td>
+            <td>768</td>
+            <td>~1s warm / 45s cold</td>
+            <td>Semantic (best)</td>
+            <td>Ollama + nomic-embed-text</td>
+          </tr>
+          <tr>
+            <td><span class="prov-name">openai</span></td>
+            <td>Transformer (text-embedding-3-small)</td>
+            <td>1536</td>
+            <td>~300ms (network)</td>
+            <td>Semantic (best)</td>
+            <td>OpenAI API key + internet</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="r" style="margin-top:2rem;font-size:.85rem;line-height:1.8;color:rgba(255,255,255,.3);font-weight:300;transition-delay:.4s;">Currently active: <strong style="color:var(--green-fg);">ollama / nomic-embed-text</strong> (768-dim transformer). The astermind provider is available as a zero-setup alternative for environments without Ollama. The ELM type classifier now trains on whichever embeddings are stored in the database — so with ollama active, the ELM gets richer 768-dim features than TF-IDF can provide.</p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     TRUTHS
+═══════════════════════════════════════════ -->
+<section class="truths" id="truths">
+  <div class="truths-wm">ML</div>
+  <div class="truths-in">
+    <div class="eye r">Design principles behind the integration</div>
+    <div class="titem">
+      <div class="tnum">01</div>
+      <div>
+        <div class="tttl">Every ML path has a graceful fallback</div>
+        <p class="tbody">If the ELM has no trained model, or if confidence is below the margin threshold, or if the embedding provider is offline, mnemo's behavior is identical to having no ML at all. Type defaults to "project." Embeddings are omitted. Retrieval falls back to BM25. Nothing breaks, nothing is blocked, nothing is silently wrong.</p>
+      </div>
+    </div>
+    <div class="titem">
+      <div class="tnum">02</div>
+      <div>
+        <div class="tttl">The ELM only ships when it earns it</div>
+        <p class="tbody">Every training run produces a held-out validation report. The ELM classifier is only persisted to disk — and only used at write-time — when it outperforms the majority-class baseline by at least 5 percentage points on the holdout set. "Do nothing" is a first-class outcome. A model that doesn't earn its keep never touches your data.</p>
+      </div>
+    </div>
+    <div class="titem">
+      <div class="tnum">03</div>
+      <div>
+        <div class="tttl">Suggest-only, never silent</div>
+        <p class="tbody">The ELM never silently overwrites a human or agent choice. When it suggests a type, it annotates the response with the suggestion and margin score, and explicitly tells the agent it can pass <code style="font-family:'Courier New',monospace;font-size:.9em;">type</code> to override. The AI stays in control. The ELM is an advisor, not an authority.</p>
+      </div>
+    </div>
+    <div class="titem">
+      <div class="tnum">04</div>
+      <div>
+        <div class="tttl">The flywheel is already turning</div>
+        <p class="tbody">Every LLM consolidation decision (which memories to merge, which contradict, which supersede) gets logged to <code style="font-family:'Courier New',monospace;font-size:.9em;">adjudication_log</code> with its feature vector and verdict. When that table accumulates enough examples, a future consolidation pre-screener can train on them — letting the ELM handle routine merges and reserving the LLM for genuinely ambiguous cases. The table is already at 54 rows.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     CLOSING
+═══════════════════════════════════════════ -->
+<section class="closing" id="closing">
+  <canvas id="ccanvas"></canvas>
+  <div class="clos-in">
+    <div class="clos-eye">AsterMind × mnemo</div>
+    <h2 class="clos-h r">Local ML that<br>actually <em>earns its place.</em></h2>
+    <p class="clos-p r" style="transition-delay:.15s;">Two tools from one package. One embeds your memories into a searchable space. The other classifies what they mean. Both run on your machine, in milliseconds, with no external dependency — and both step aside the moment they're not confident enough to be useful.</p>
+    <div class="r" style="transition-delay:.3s;">
+      <a href="#hero" class="cta">Back to top &nbsp;↑</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <a href="#" class="fmk">mnemo</a>
+  <p>Built with @astermind/astermind-elm · En Dash</p>
+</footer>
+
+<script>
+/* ─── CURSOR ─── */
+const cur = document.getElementById('cur');
+const ring = document.getElementById('curring');
+const glow = document.getElementById('curglow');
+let cx = 0, cy = 0, rx = 0, ry = 0, gx = 0, gy = 0;
+document.addEventListener('mousemove', e => { cx = e.clientX; cy = e.clientY; });
+document.querySelectorAll('a,button,.pcard').forEach(el => {
+  el.addEventListener('mouseenter', () => { cur.style.width='14px'; cur.style.height='14px'; ring.style.width='52px'; ring.style.height='52px'; });
+  el.addEventListener('mouseleave', () => { cur.style.width='8px'; cur.style.height='8px'; ring.style.width='36px'; ring.style.height='36px'; });
+});
+(function animCur() {
+  rx += (cx - rx) * 0.18;
+  ry += (cy - ry) * 0.18;
+  gx += (cx - gx) * 0.07;
+  gy += (cy - gy) * 0.07;
+  cur.style.left = cx + 'px'; cur.style.top = cy + 'px';
+  ring.style.left = rx + 'px'; ring.style.top = ry + 'px';
+  glow.style.left = gx + 'px'; glow.style.top = gy + 'px';
+  requestAnimationFrame(animCur);
+})();
+
+/* ─── HERO CANVAS ─── */
+(function() {
+  const c = document.getElementById('hcanvas');
+  const ctx = c.getContext('2d');
+  let W, H, pts;
+  function resize() { W = c.width = c.offsetWidth; H = c.height = c.offsetHeight; }
+  function init() {
+    pts = Array.from({length: 60}, () => ({
+      x: Math.random() * W, y: Math.random() * H,
+      vx: (Math.random() - .5) * .4, vy: (Math.random() - .5) * .4,
+      r: Math.random() * 1.5 + .5
+    }));
+  }
+  function draw(t) {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(5,8,18,0)';
+    pts.forEach(p => {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0 || p.x > W) p.vx *= -1;
+      if (p.y < 0 || p.y > H) p.vy *= -1;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,229,185,0.35)';
+      ctx.fill();
+    });
+    // draw connections
+    for (let i = 0; i < pts.length; i++) {
+      for (let j = i + 1; j < pts.length; j++) {
+        const dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y;
+        const d = Math.sqrt(dx*dx + dy*dy);
+        if (d < 120) {
+          ctx.beginPath();
+          ctx.moveTo(pts[i].x, pts[i].y);
+          ctx.lineTo(pts[j].x, pts[j].y);
+          ctx.strokeStyle = `rgba(108,65,240,${(1 - d/120) * 0.18})`;
+          ctx.lineWidth = .5;
+          ctx.stroke();
+        }
+      }
+    }
+    requestAnimationFrame(draw);
+  }
+  window.addEventListener('resize', () => { resize(); init(); });
+  resize(); init(); draw(0);
+})();
+
+/* ─── CLOSING CANVAS ─── */
+(function() {
+  const c = document.getElementById('ccanvas');
+  const ctx = c.getContext('2d');
+  let W, H;
+  function resize() { W = c.width = c.offsetWidth; H = c.height = c.offsetHeight; }
+  window.addEventListener('resize', resize); resize();
+  let t = 0;
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    t += 0.004;
+    const grd = ctx.createRadialGradient(W*.5 + Math.sin(t)*80, H*.5 + Math.cos(t*.7)*60, 0, W*.5, H*.5, W*.65);
+    grd.addColorStop(0, 'rgba(0,229,185,0.055)');
+    grd.addColorStop(.5, 'rgba(108,65,240,0.04)');
+    grd.addColorStop(1, 'transparent');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, W, H);
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+/* ─── SCROLL REVEAL ─── */
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('vis'); });
+}, { threshold: .12 });
+document.querySelectorAll('.r, .rl, .titem, .stat').forEach(el => obs.observe(el));
+
+/* ─── ACCORDION ─── */
+document.querySelectorAll('.pcard').forEach(card => {
+  card.addEventListener('click', () => {
+    const wasOpen = card.classList.contains('open');
+    document.querySelectorAll('.pcard').forEach(c => c.classList.remove('open'));
+    if (!wasOpen) card.classList.add('open');
+  });
+});
+
+/* ─── INTERACTIVE DEMO ─── */
+const TYPES = ['feedback','reference','project','user','semantic','episodic'];
+const TYPE_COLORS = {
+  feedback: '#00e5b9', reference: '#c4a8ff', project: '#ffaa88',
+  user: '#ff99bb', semantic: '#7dd3fc', episodic: '#fbbf24'
+};
+const KEYWORDS = {
+  feedback: ['always','never','prefer','avoid','don\'t','do not','should','must','remember','convention','best practice','rule','guideline','commit','push','test','deploy'],
+  reference: ['see','docs','at','documentation','link','url','config','file','path','located','lives','the','api','database','table','schema'],
+  user: ['i prefer','i like','i want','my preference','i use','my workflow','personally','i always','i never'],
+  project: ['project','app','repo','codebase','deploy','build','pipeline','production','staging','uses','runs','port','database','migration'],
+  semantic: ['concept','meaning','principle','idea','pattern','framework','theory','approach','architecture','paradigm','strategy'],
+  episodic: ['today','yesterday','during','we','meeting','session','discussed','happened','decided','noticed','ran','tried','found','broke','fixed']
+};
+
+function scoreType(text) {
+  const lower = text.toLowerCase();
+  const scores = {};
+  TYPES.forEach(t => { scores[t] = 0; });
+  TYPES.forEach(type => {
+    KEYWORDS[type].forEach(kw => {
+      if (lower.includes(kw)) scores[type] += 1 + (kw.length / 10);
+    });
+  });
+  // word count length bias
+  const words = lower.match(/\b\w+\b/g) || [];
+  if (words.length < 8) scores.feedback += 0.5;
+  if (words.length > 20) scores.project += 0.3;
+  return scores;
+}
+
+function softmax(scores) {
+  const vals = TYPES.map(t => scores[t]);
+  const max = Math.max(...vals);
+  const exps = vals.map(v => Math.exp((v - max) * 1.8));
+  const sum = exps.reduce((a, b) => a + b, 0);
+  const proba = {};
+  TYPES.forEach((t, i) => proba[t] = exps[i] / sum);
+  return proba;
+}
+
+function fakeVec(text) {
+  const words = (text.toLowerCase().match(/[a-z]{3,}/g) || []).slice(0, 32);
+  return Array.from({length: 48}, (_, i) => {
+    let v = 0;
+    words.forEach((w, j) => {
+      const h = Array.from(w + i).reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) & 0xffff, 0);
+      v += ((h % 2 === 0 ? 1 : -1) * (h % 100) / 200);
+    });
+    return Math.max(-1, Math.min(1, v / (words.length || 1)));
+  });
+}
+
+document.getElementById('demoBtn').addEventListener('click', runDemo);
+document.getElementById('demoInput').addEventListener('keydown', e => { if (e.key === 'Enter') runDemo(); });
+
+function runDemo() {
+  const text = document.getElementById('demoInput').value.trim();
+  if (!text) return;
+
+  const out = document.getElementById('demoOutput');
+  out.classList.remove('show');
+  void out.offsetHeight; // force reflow for animation
+
+  // Step 1 — tokenize
+  const tokens = (text.toLowerCase().match(/[a-z]{3,}/g) || []).slice(0, 12);
+  document.getElementById('demoTokens').textContent = tokens.length
+    ? 'Tokens: ' + tokens.map(t => `[${t}]`).join(' ') + (tokens.length >= 12 ? ' …' : '')
+    : '(no meaningful tokens)';
+
+  // fake vector bars
+  const vec = fakeVec(text);
+  const vecRow = document.getElementById('demoVec');
+  vecRow.innerHTML = '';
+  const barW = Math.floor(vecRow.offsetWidth / vec.length) || 4;
+  vec.forEach(v => {
+    const bar = document.createElement('div');
+    bar.className = 'vec-bar';
+    const h = Math.abs(v) * 28 + 4;
+    bar.style.cssText = `height:${h}px;min-width:${barW-1}px;background:${v >= 0 ? 'rgba(0,229,185,0.5)' : 'rgba(213,46,102,0.5)'};`;
+    vecRow.appendChild(bar);
+  });
+
+  // Step 2 — classify
+  const scores = scoreType(text);
+  const proba = softmax(scores);
+  const sorted = [...TYPES].sort((a, b) => proba[b] - proba[a]);
+  const top = sorted[0], second = sorted[1];
+  const margin = proba[top] - proba[second];
+
+  document.getElementById('predLabel').textContent = top;
+  document.getElementById('predLabel').style.color = TYPE_COLORS[top];
+  document.getElementById('predMeta').innerHTML =
+    `confidence <strong style="color:${TYPE_COLORS[top]}">${(proba[top]*100).toFixed(1)}%</strong><br>` +
+    `margin vs runner-up <strong style="color:rgba(255,255,255,.6)">${(margin*100).toFixed(1)}%</strong><br>` +
+    `runner-up: <em style="color:rgba(255,255,255,.4)">${second} (${(proba[second]*100).toFixed(1)}%)</em>`;
+
+  const barsEl = document.getElementById('predBars');
+  barsEl.innerHTML = '';
+  sorted.forEach(type => {
+    const row = document.createElement('div'); row.className = 'pbar-row';
+    const pct = (proba[type] * 100).toFixed(1);
+    row.innerHTML = `<div class="pbar-name">${type}</div>
+      <div class="pbar-track"><div class="pbar-fill" style="width:0%;background:${TYPE_COLORS[type]};opacity:0.7;" data-w="${(proba[type]*100).toFixed(1)}"></div></div>
+      <div class="pbar-pct">${pct}%</div>`;
+    barsEl.appendChild(row);
+  });
+  setTimeout(() => {
+    barsEl.querySelectorAll('.pbar-fill').forEach(el => { el.style.width = el.dataset.w + '%'; });
+  }, 60);
+
+  // Step 3 — gate
+  const minMargin = 0.10;
+  const gateEl = document.getElementById('predGate');
+  if (margin >= minMargin) {
+    gateEl.innerHTML = `<span style="color:var(--mint)">✓ Margin ${(margin*100).toFixed(1)}% ≥ threshold ${(minMargin*100)}%</span><br>
+      <span style="color:rgba(255,255,255,.4);font-size:.8em;">→ ELM suggestion accepted: type set to "<strong style="color:${TYPE_COLORS[top]}">${top}</strong>"<br>
+      Agent notified — can override by passing <code style="font-family:'Courier New',monospace;">type</code> explicitly.</span>`;
+  } else {
+    gateEl.innerHTML = `<span style="color:var(--rose-fg)">✗ Margin ${(margin*100).toFixed(1)}% < threshold ${(minMargin*100)}%</span><br>
+      <span style="color:rgba(255,255,255,.4);font-size:.8em;">→ Near-tie — ELM not confident enough. Defaulting to "<strong style="color:var(--orange-fg)">project</strong>"</span>`;
+  }
+
+  out.classList.add('show');
+}
+
+/* ─── STATS OBSERVER ─── */
+const statObs = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('vis'); });
+}, { threshold: .3 });
+document.querySelectorAll('.stat').forEach(el => statObs.observe(el));
+</script>
+
+</body>
+</html>

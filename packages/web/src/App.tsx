@@ -854,6 +854,9 @@ export default function App() {
         <div className="header-actions">
           <button className="secondary" title="Settings" onClick={openSettings} style={{ width: '34px', padding: 0 }}>⚙</button>
           <button className="secondary" title="What am I looking at?" onClick={() => setShowHelp(true)} style={{ width: '34px', padding: 0 }}>?</button>
+          <a href="/astermind-scroll.html" target="_blank" rel="noopener" className="secondary" title="How mnemo uses AsterMind ML — interactive scroll" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 700, letterSpacing: '.04em' }}>
+            ML Docs ↗
+          </a>
           {isDreaming && (
             <div className="dream-status-anim">
               <div className="spinner"></div>
