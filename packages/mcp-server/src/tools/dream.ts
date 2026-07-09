@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { MemoryStore } from '@mnemo/core';
 import type { GraphStore } from '@mnemo/core';
-import { dream, consolidateSession, getDreamLog, reindexEmbeddings } from '@mnemo/core';
+import { dream, consolidateSession, getDreamLog, reindexEmbeddings, reloadConfig } from '@mnemo/core';
 
 export function registerDreamTools(server: McpServer, store: MemoryStore, graph: GraphStore): void {
   server.registerTool('dream', {
@@ -12,6 +12,11 @@ export function registerDreamTools(server: McpServer, store: MemoryStore, graph:
       cwd: z.string().optional().describe('Current working directory — used as project path for TiMem promotions'),
     }),
   }, async ({ scope, cwd }) => {
+    // Config is memoized at first read; a long-lived server would otherwise
+    // dream with providers from before any ~/.mnemo/config.json edits (the
+    // cause of a real crash: a stale 'claude-cli' provider spawning CLI
+    // children after the user had switched to ollama). Re-read every dream.
+    reloadConfig();
     const stats = await dream(store, graph, { scope, cwd });
     const lines = [
       '**Dream complete**',
@@ -54,9 +59,10 @@ export function registerDreamTools(server: McpServer, store: MemoryStore, graph:
     description: 'Clear and recompute ALL embeddings with the currently-configured provider. Use after changing embeddings.provider, or to embed a backlog created before embeddings were enabled. No-op if no provider is configured.',
     inputSchema: z.object({}),
   }, async () => {
+    reloadConfig(); // pick up provider changes without a server restart
     const r = await reindexEmbeddings(store);
     if (r.provider === 'none') {
-      return { content: [{ type: 'text' as const, text: 'No embedding provider configured — nothing to reindex. Set embeddings.provider in ~/.mnemo/config.json (and restart the server) first.' }] };
+      return { content: [{ type: 'text' as const, text: 'No embedding provider configured — nothing to reindex. Set embeddings.provider in ~/.mnemo/config.json first (picked up automatically on the next call).' }] };
     }
     return { content: [{ type: 'text' as const, text: `Reindexed embeddings with "${r.provider}": cleared ${r.cleared}, re-encoded ${r.embedded}.` }] };
   });
