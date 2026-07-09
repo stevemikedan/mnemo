@@ -34,8 +34,14 @@ export class BM25Index {
 
   search(query: string, limit = 50): SearchResult[] {
     if (!this.index || this.memoryMap.size === 0) return [];
+    // Strip lunr query-syntax operators before parsing. Queries here are plain
+    // text (often raw memory content), and lunr would interpret e.g. "~45" as
+    // fuzzy-match-with-edit-distance-45 — which explodes the heap (real crash:
+    // a memory containing "measured ~45 seconds" OOM'd every dream). Hyphens
+    // are safe to space out (lunr's tokenizer already splits on them).
+    const sanitized = query.replace(/[~^:*+\-]/g, ' ');
     try {
-      const results = this.index.search(query);
+      const results = this.index.search(sanitized);
       return results
         .slice(0, limit)
         .map(r => ({ memory: this.memoryMap.get(r.ref)!, score: r.score }))
