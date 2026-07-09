@@ -1,15 +1,26 @@
 import { localEmbed, cosineSim, decodeVector } from '../rag/embedding.js';
 import type { Memory } from '../graph/schema.js';
 
-/**
- * Fixed dimension for classifier text features. Uses the built-in deterministic
- * hashing embedder so features are provider-independent and identical at train
- * and predict time (no dependency on which embeddings.provider is configured).
- */
+/** Dimension for the built-in local hashing embedder. */
 export const TEXT_FEATURE_DIM = 256;
 
+/** 256-dim local hashing features — sync, provider-independent. */
 export function textFeatures(content: string): number[] {
   return localEmbed([content], TEXT_FEATURE_DIM)[0];
+}
+
+/**
+ * Features for a stored Memory. Prefers the stored embedding blob (e.g. 768-dim
+ * nomic vectors after encodeForDream) so the classifier can leverage the richer
+ * transformer representation. Falls back to local 256-dim hashing when no blob
+ * is present. Callers must ensure all samples in a training run use the same
+ * path — use this function uniformly rather than mixing with textFeatures().
+ */
+export function textFeaturesFromMemory(m: Memory): number[] {
+  if (m.embedding != null) {
+    return Array.from(decodeVector(m.embedding as Buffer));
+  }
+  return localEmbed([m.content], TEXT_FEATURE_DIM)[0];
 }
 
 export function wordOverlap(a: string, b: string): number {

@@ -39,7 +39,7 @@ export function registerWriteTools(server: McpServer, store: MemoryStore, graph:
 
     let finalType = type as MemoryType | undefined;
     if (!finalType) {
-      const suggested = readConfig().ml?.typeSuggest?.enabled ? suggestType(content) : null;
+      const suggested = readConfig().ml?.typeSuggest?.enabled ? await suggestType(content) : null;
       if (suggested) {
         finalType = suggested.type;
         note += `\nType inferred as \`${suggested.type}\` (confidence ${suggested.confidence.toFixed(2)}, margin ${suggested.margin.toFixed(2)}) — pass \`type\` to override.`;

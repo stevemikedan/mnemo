@@ -28,29 +28,30 @@ function seed(store: MemoryStore) {
 }
 
 describe('type classifier', () => {
-  it('trains on a type-distinct corpus, beats baseline, and suggests the right type', () => {
+  it('trains on a type-distinct corpus, beats baseline, and suggests the right type', async () => {
     const store = new MemoryStore(':memory:');
     seed(store);
     const report = trainTypeClassifier(store);
     expect(report.trained).toBe(true);
     expect(report.accuracy!).toBeGreaterThan(report.baselineAccuracy!);
-    const s = suggestType('remember to run the tests before committing your changes');
+    // No stored embeddings in :memory: store → 256-dim local path (sync under the hood)
+    const s = await suggestType('remember to run the tests before committing your changes');
     expect(s?.type).toBe<MemoryType>('feedback');
   });
 
-  it('cold-start: tiny store → no model persisted, suggestType returns null', () => {
+  it('cold-start: tiny store → no model persisted, suggestType returns null', async () => {
     const store = new MemoryStore(':memory:');
     store.create({ content: 'one lonely memory', type: 'project', scope: 'global' });
     const report = trainTypeClassifier(store);
     expect(report.trained).toBe(false);
-    expect(suggestType('anything at all')).toBeNull();
+    expect(await suggestType('anything at all')).toBeNull();
   });
 
-  it('respects the confidence/margin gate', () => {
+  it('respects the confidence/margin gate', async () => {
     const store = new MemoryStore(':memory:');
     seed(store);
     trainTypeClassifier(store);
     __setConfig({ ml: { typeSuggest: { enabled: true, minConfidence: 0.999, minMargin: 0.999 } } });
-    expect(suggestType('remember to run the tests before committing')).toBeNull();
+    expect(await suggestType('remember to run the tests before committing')).toBeNull();
   });
 });

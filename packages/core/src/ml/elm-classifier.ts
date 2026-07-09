@@ -12,6 +12,8 @@ export interface Prediction<L extends string = string> {
 
 export interface ElmClassifier<L extends string = string> {
   categories: L[];
+  /** Feature-vector dimension the model was trained on. Used to choose the right embedder at predict time. */
+  inputSize: number;
   /** Predict from a numeric feature vector, or null if untrained / dim-mismatch. */
   predict(vec: number[]): Prediction<L> | null;
   /** Serialize to a JSON string (round-trips via loadElmClassifier). */
@@ -44,6 +46,7 @@ function makeNumericConfig<L extends string>(categories: L[], inputSize: number,
 function wrap<L extends string>(elm: ELM, categories: L[], inputSize: number): ElmClassifier<L> {
   return {
     categories,
+    inputSize,
     predict(vec: number[]): Prediction<L> | null {
       if (!elm.model) return null;
       if (inputSize > 0 && vec.length !== inputSize) return null;
