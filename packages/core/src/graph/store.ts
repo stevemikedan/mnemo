@@ -47,6 +47,17 @@ export class MemoryStore {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     this.db.exec(SCHEMA_SQL);
+    this.migrate();
+  }
+
+  /** Additive migrations for DBs created before a column existed (CREATE TABLE
+   * IF NOT EXISTS skips them). Each is idempotent — checked against PRAGMA
+   * table_info before altering. */
+  private migrate(): void {
+    const cols = this.db.prepare('PRAGMA table_info(adjudication_log)').all() as { name: string }[];
+    if (!cols.some(c => c.name === 'model')) {
+      this.db.exec('ALTER TABLE adjudication_log ADD COLUMN model TEXT');
+    }
   }
 
   create(opts: CreateMemoryOptions): Memory {

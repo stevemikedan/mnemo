@@ -1,4 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
+import Database from 'better-sqlite3';
+import { mkdtempSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { MemoryStore } from '../src/graph/store.js';
 import { GraphStore } from '../src/graph/graph.js';
 import { dream } from '../src/consolidation/dream.js';
@@ -54,5 +58,42 @@ describe('adjudication logging', () => {
     expect(r.length).toBeGreaterThanOrEqual(1);
     expect(['nrem', 'reconcile']).toContain(r[0].phase);
     expect(JSON.parse(r[0].features).length).toBe(8);
+    // Every verdict carries the resolved provider/model stamp for label filtering.
+    expect(r[0].model).toBe('anthropic/claude-haiku-4-5-20251001');
+  });
+
+  it('logAdjudication stores an explicit model stamp', () => {
+    __setConfig({});
+    const { store } = setup();
+    logAdjudication(store, {
+      older_id: 'a', newer_id: 'b', scope: 'global', phase: 'nrem',
+      features: [1, 0, 0, 1, 1, 0, 0, 0], verdict: 'MERGE', source: 'llm',
+      model: 'ollama/llama3.2:3b',
+    });
+    expect(rows(store)[0].model).toBe('ollama/llama3.2:3b');
+  });
+
+  it('migrates a pre-model-column DB: adds the column, keeps old rows readable', () => {
+    const dbPath = join(mkdtempSync(join(tmpdir(), 'mnemo-mig-')), 'test.db');
+    // Simulate a DB created before the model column existed.
+    const old = new Database(dbPath);
+    old.exec(`CREATE TABLE adjudication_log (
+      id TEXT PRIMARY KEY, older_id TEXT NOT NULL, newer_id TEXT NOT NULL,
+      scope TEXT NOT NULL, phase TEXT NOT NULL, features TEXT NOT NULL,
+      verdict TEXT NOT NULL, source TEXT NOT NULL, created_at TEXT NOT NULL
+    )`);
+    old.prepare(`INSERT INTO adjudication_log VALUES ('x','a','b','global','nrem','[]','MERGE','llm','2026-01-01T00:00:00Z')`).run();
+    old.close();
+
+    const store = new MemoryStore(dbPath); // constructor runs the migration
+    const r = rows(store);
+    expect(r).toHaveLength(1);
+    expect(r[0].model).toBeNull(); // pre-migration rows: provenance unknown
+    // And new inserts with a stamp work against the migrated table.
+    logAdjudication(store, {
+      older_id: 'c', newer_id: 'd', scope: 'global', phase: 'reconcile',
+      features: [0, 0, 0, 0, 0, 0, 0, 0], verdict: 'NONE', source: 'llm', model: 'claude-cli/haiku',
+    });
+    expect(rows(store)).toHaveLength(2);
   });
 });

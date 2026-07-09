@@ -17,6 +17,24 @@ function resolveApiKey(): string | null {
   return raw.replace('${ANTHROPIC_API_KEY}', process.env['ANTHROPIC_API_KEY'] ?? '');
 }
 
+/**
+ * Human/queryable description of the model llmComplete would use right now,
+ * e.g. 'ollama/llama3.2:3b' or 'claude-cli/haiku'. Mirrors the per-provider
+ * defaults in the completion functions below so the stamp is always what
+ * actually ran. 'none' when no provider is active.
+ */
+export function describeConsolidationModel(): string {
+  const provider = resolveProvider();
+  if (provider === 'none') return 'none';
+  const model = readConfig().consolidation?.model ?? (
+    provider === 'claude-cli' ? 'haiku'
+    : provider === 'anthropic' ? 'claude-haiku-4-5-20251001'
+    : provider === 'ollama' ? 'llama3.2'
+    : 'gpt-4o-mini'
+  );
+  return `${provider}/${model}`;
+}
+
 export async function llmComplete(prompt: string, system?: string): Promise<string | null> {
   const provider = resolveProvider();
   if (provider === 'none') return null;

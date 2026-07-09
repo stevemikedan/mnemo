@@ -46,6 +46,7 @@ export const SCHEMA_SQL = `
     features   TEXT NOT NULL,   -- JSON number[]
     verdict    TEXT NOT NULL,   -- reconcile: SUPERSEDES|CONTRADICTS|NONE ; nrem: MERGE|SKIP
     source     TEXT NOT NULL,   -- 'llm' | 'elm' | 'heuristic'
+    model      TEXT,            -- provider/model that rendered the verdict, e.g. 'ollama/llama3.2:3b' — lets training filter by label quality
     created_at TEXT NOT NULL
   );
 

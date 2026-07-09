@@ -6,6 +6,7 @@ import { runNREM, defaultMerge } from './nrem.js';
 import { runREM } from './rem.js';
 import { runDecay } from './decay.js';
 import { runReconcile, llmAdjudicate } from './reconcile.js';
+import { describeConsolidationModel } from './llm.js';
 import { encodeForDream } from '../rag/embedding.js';
 import { readConfig } from './config.js';
 import { trainTypeClassifier } from '../ml/type-classifier.js';
@@ -74,12 +75,15 @@ export async function dream(store: MemoryStore, graph: GraphStore, opts: DreamOp
   // beats the naive baseline on held-out data. Off unless ml.typeSuggest.enabled.
   const typeReport = readConfig().ml?.typeSuggest?.enabled ? trainTypeClassifier(store) : undefined;
 
+  // Resolve once per dream — the same stamp goes on every verdict this pass.
+  const adjudicatorModel = describeConsolidationModel();
+
   // NREM with a logging wrapper — captures each MERGE/SKIP verdict + features as
   // pre-screener training data (only when an LLM is really adjudicating).
   const nrem = await runNREM(store, graph, memories, async (survivor, candidate) => {
     const verdict = await defaultMerge(survivor, candidate);
     if (shouldLogAdjudications()) {
-      logAdjudication(store, { older_id: survivor.id, newer_id: candidate.id, scope: survivor.scope, phase: 'nrem', features: pairFeatures(survivor, candidate), verdict, source: 'llm' });
+      logAdjudication(store, { older_id: survivor.id, newer_id: candidate.id, scope: survivor.scope, phase: 'nrem', features: pairFeatures(survivor, candidate), verdict, source: 'llm', model: adjudicatorModel });
     }
     return verdict;
   });
@@ -98,7 +102,7 @@ export async function dream(store: MemoryStore, graph: GraphStore, opts: DreamOp
   const reconcile = await runReconcile(store, graph, reconcileSet, async (older, newer) => {
     const verdict = await llmAdjudicate(older, newer);
     if (shouldLogAdjudications()) {
-      logAdjudication(store, { older_id: older.id, newer_id: newer.id, scope: older.scope, phase: 'reconcile', features: pairFeatures(older, newer), verdict, source: 'llm' });
+      logAdjudication(store, { older_id: older.id, newer_id: newer.id, scope: older.scope, phase: 'reconcile', features: pairFeatures(older, newer), verdict, source: 'llm', model: adjudicatorModel });
     }
     return verdict;
   });
