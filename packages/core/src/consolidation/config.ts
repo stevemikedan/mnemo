@@ -46,9 +46,19 @@ export interface MnemoConfig {
 }
 
 let _config: MnemoConfig | null = null;
+/** When set via __setConfig, TTL expiry must not replace it mid-test. */
+let _pinned = false;
+let _readAt = 0;
+/** Config re-reads from disk after this long, so ~/.mnemo/config.json edits
+ * apply to every code path (remember, recall, dream, web API) within seconds —
+ * no server restart needed — while hot loops still hit the memo. */
+const CONFIG_TTL_MS = 2_000;
 
 export function readConfig(): MnemoConfig {
-  if (_config) return _config;
+  if (_pinned && _config) return _config;
+  const now = Date.now();
+  if (_config && now - _readAt < CONFIG_TTL_MS) return _config;
+  _readAt = now;
   const path = process.env['MNEMO_CONFIG_PATH'] ?? join(homedir(), '.mnemo', 'config.json');
   if (!existsSync(path)) return (_config = {});
   try {
@@ -61,18 +71,21 @@ export function readConfig(): MnemoConfig {
 
 /**
  * Test seam: override the memoized config directly. Pass an object to force a
- * config (e.g. `{ embeddings: { provider: 'local' } }`), or null to reset so
- * the next readConfig re-reads from disk. Not for production use.
+ * config (e.g. `{ embeddings: { provider: 'local' } }`) — it is pinned and
+ * exempt from TTL re-reads until cleared. Pass null to reset so the next
+ * readConfig re-reads from disk. Not for production use.
  */
 export function __setConfig(cfg: MnemoConfig | null): void {
   _config = cfg;
+  _pinned = cfg !== null;
 }
 
 /**
- * Clear the memoized config so the next readConfig re-reads from disk. Call
- * after writing config.json at runtime (e.g. from a settings UI) so changes
- * apply without a process restart.
+ * Clear the memoized config so the next readConfig re-reads from disk
+ * immediately (without waiting out the TTL). Call after writing config.json
+ * at runtime (e.g. from a settings UI).
  */
 export function reloadConfig(): void {
   _config = null;
+  _pinned = false;
 }
