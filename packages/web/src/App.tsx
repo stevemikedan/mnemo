@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
+import Home from './Home';
+import { typeLabel, TYPE_HINT, scopeName, confidenceWord, confidenceDots, cleanContent } from './format';
+
+// Edge types colored + labeled so the knowledge graph reads at a glance.
+const EDGE_META: Record<string, { color: string; label: string }> = {
+  'relates-to': { color: 'var(--color-reference)', label: 'relates to' },
+  'supersedes': { color: 'var(--color-project)', label: 'supersedes' },
+  'contradicts': { color: 'var(--color-feedback)', label: 'contradicts' },
+  'derived-from': { color: 'var(--color-semantic)', label: 'derived from' },
+  'co-occurred': { color: 'var(--color-episodic)', label: 'co-occurred' },
+};
 
 interface Memory {
   id: string;
@@ -15,6 +26,7 @@ interface Memory {
   last_consolidated: string | null;
   tags: string[];
   source: string;
+  superseded_by?: string | null;
 }
 
 interface Edge {
@@ -66,6 +78,9 @@ export default function App() {
   const [filterScope, setFilterScope] = useState<string>('all');
   const [isDreaming, setIsDreaming] = useState(false);
   const [dreamStatus, setDreamStatus] = useState('');
+
+  // Top-level view: 'home' is the default landing; 'workspace' is the full 3-panel tool
+  const [activeView, setActiveView] = useState<'home' | 'workspace'>('home');
 
   // Collapsible panels — let the graph reclaim space
   const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -852,11 +867,19 @@ export default function App() {
         </div>
 
         <div className="header-actions">
+          {/* View nav */}
+          <div className="view-tabs">
+            <button
+              className={`view-tab ${activeView === 'home' ? 'active' : ''}`}
+              onClick={() => setActiveView('home')}
+            >Home</button>
+            <button
+              className={`view-tab ${activeView === 'workspace' ? 'active' : ''}`}
+              onClick={() => setActiveView('workspace')}
+            >Workspace</button>
+          </div>
           <button className="secondary" title="Settings" onClick={openSettings} style={{ width: '34px', padding: 0 }}>⚙</button>
           <button className="secondary" title="What am I looking at?" onClick={() => setShowHelp(true)} style={{ width: '34px', padding: 0 }}>?</button>
-          <a href="/astermind-scroll.html" target="_blank" rel="noopener" className="secondary" title="How mnemo uses AsterMind ML — interactive scroll" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 700, letterSpacing: '.04em' }}>
-            ML Docs ↗
-          </a>
           {isDreaming && (
             <div className="dream-status-anim">
               <div className="spinner"></div>
@@ -872,8 +895,18 @@ export default function App() {
         </div>
       </header>
 
+      {/* HOME VIEW */}
+      {activeView === 'home' && (
+        <Home
+          stats={stats}
+          dreamLogs={dreamLogs}
+          onOpenWorkspace={() => setActiveView('workspace')}
+          onSelectMemory={(id) => setSelectedId(id)}
+        />
+      )}
+
       {/* DASHBOARD SPLIT GRID */}
-      <main
+      {activeView === 'workspace' && <main
         className="workspace"
         style={{
           gridTemplateColumns: `${leftCollapsed ? '40px' : '360px'} 1fr ${rightCollapsed ? '40px' : '340px'}`,
@@ -1028,12 +1061,12 @@ export default function App() {
                           style={{ backgroundColor: `var(--color-${node.type})` }}
                         ></div>
                         <div className="memory-item-header">
-                          <span className={`badge ${node.type}`}>{node.type}</span>
-                          <span className="memory-item-id">{node.id.slice(0, 8)}</span>
+                          <span className={`badge ${node.type}`} title={TYPE_HINT[node.type]}>{typeLabel(node.type)}</span>
+                          {node.superseded_by && <span className="badge" style={{ opacity: 0.6 }} title="Superseded by a newer memory">superseded</span>}
                         </div>
-                        <div className="memory-item-content">{node.content}</div>
+                        <div className="memory-item-content">{cleanContent(node.content).text}</div>
                         <div className="memory-item-footer">
-                          <span className="memory-item-scope">{node.scope === 'global' ? 'Global' : node.scope.split('/').pop()}</span>
+                          <span className="memory-item-scope">{scopeName(node.scope)}</span>
                           <div className="memory-item-tags">
                             {node.tags && node.tags.slice(0, 2).map(tag => (
                               <span key={tag} className="memory-item-tag">#{tag}</span>
@@ -1181,11 +1214,13 @@ export default function App() {
                       y1={sourceNode.y}
                       x2={targetNode.x}
                       y2={targetNode.y}
-                      stroke={isSelected ? 'var(--accent)' : 'var(--border-focus)'}
-                      strokeWidth={isSelected ? 1.8 : 1.0}
-                      opacity={isSelected ? 0.9 : 0.4}
+                      stroke={isSelected ? 'var(--accent)' : (EDGE_META[edge.type]?.color ?? 'var(--border-focus)')}
+                      strokeWidth={isSelected ? 1.8 : 1.2}
+                      opacity={isSelected ? 0.95 : 0.5}
                       className={`graph-edge ${edge.type}`}
-                    />
+                    >
+                      <title>{EDGE_META[edge.type]?.label ?? edge.type}</title>
+                    </line>
                   </g>
                 );
               })}
@@ -1238,15 +1273,26 @@ export default function App() {
                     {/* Tiny visual indicators on nodes */}
                     <circle r={Math.max(1.5, radius * 0.22)} fill={`var(--color-${node.type})`} opacity={0.6} />
 
-                    {/* Node Label (Short content excerpt) */}
+                    {/* Node Label — cleaned excerpt, full text on hover */}
                     <text y={radius + 10} className="node-text">
-                      {node.content.length > 20 ? `${node.content.slice(0, 18)}...` : node.content}
+                      <title>{cleanContent(node.content).text}</title>
+                      {(() => { const t = cleanContent(node.content).text; return t.length > 30 ? `${t.slice(0, 28)}…` : t; })()}
                     </text>
                   </g>
                 );
               })}
             </g>
           </svg>
+
+          {/* Edge-type legend so the graph reads without guesswork */}
+          <div className="graph-legend">
+            {Object.entries(EDGE_META).map(([type, meta]) => (
+              <span key={type} className="graph-legend-item">
+                <span className="graph-legend-swatch" style={{ background: meta.color }} />
+                {meta.label}
+              </span>
+            ))}
+          </div>
         </section>
 
         {/* RIGHT PANEL: Details panel, linker and edit mode */}
@@ -1379,7 +1425,8 @@ export default function App() {
                     ></div>
                   </div>
                   <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '3px' }}>
-                    confidence {(selectedMemory.confidence ?? 0).toFixed(2)} — fades over time, rises when recalled
+                    <span style={{ fontFamily: 'var(--font-mono)' }}>{confidenceDots(selectedMemory.confidence ?? 0)}</span>
+                    {' '}{confidenceWord(selectedMemory.confidence ?? 0)} — fades over time, rises when recalled
                   </div>
                 </div>
 
@@ -1580,7 +1627,7 @@ export default function App() {
           </div>
           )}
         </footer>
-      </main>
+      </main>}
 
       {/* SETTINGS OVERLAY */}
       {showSettings && (

@@ -298,7 +298,7 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
     <span class="h1-line h1-grad">Learning,</span>
     <span class="h1-line h1-outline">Local.</span>
   </h1>
-  <p class="hero-sub">mnemo uses AsterMind's npm package to run two distinct ML tools directly on your device — no cloud, no API key, no model download required. This is how we taught mnemo to understand its own memories.</p>
+  <p class="hero-sub">mnemo uses AsterMind's npm package to run a fleet of tiny on-device models — classifying every memory, pre-screening consolidation decisions before they cost an LLM call, and reranking recall by what you actually use. No cloud, no API key, no model download required.</p>
   <div class="hero-sh">
     <div class="sh-track"></div>
     <span class="sh-word">Scroll to explore</span>
@@ -308,7 +308,7 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 <!-- TICKER -->
 <div class="tko">
   <div class="tki">
-    <span>TF-IDF Vectorizer</span><span class="s">·</span><span>Extreme Learning Machines</span><span class="s">·</span><span>On-device inference</span><span class="s">·</span><span>No API key required</span><span class="s">·</span><span>Memory type classification</span><span class="s">·</span><span>Corpus embeddings</span><span class="s">·</span><span>Closed-form training</span><span class="s">·</span><span>Ridge regression</span><span class="s">·</span><span>Zero cloud dependency</span><span class="s">·</span><span>TF-IDF Vectorizer</span><span class="s">·</span><span>Extreme Learning Machines</span><span class="s">·</span><span>On-device inference</span><span class="s">·</span><span>No API key required</span><span class="s">·</span><span>Memory type classification</span><span class="s">·</span><span>Corpus embeddings</span><span class="s">·</span><span>Closed-form training</span><span class="s">·</span><span>Ridge regression</span><span class="s">·</span><span>Zero cloud dependency</span><span class="s">·</span>
+    <span>Extreme Learning Machines</span><span class="s">·</span><span>Recall reranking</span><span class="s">·</span><span>LLM pre-screening</span><span class="s">·</span><span>Memory type classification</span><span class="s">·</span><span>Citation feedback loop</span><span class="s">·</span><span>On-device inference</span><span class="s">·</span><span>No API key required</span><span class="s">·</span><span>Closed-form training</span><span class="s">·</span><span>Ridge regression</span><span class="s">·</span><span>Zero cloud dependency</span><span class="s">·</span><span>Extreme Learning Machines</span><span class="s">·</span><span>Recall reranking</span><span class="s">·</span><span>LLM pre-screening</span><span class="s">·</span><span>Memory type classification</span><span class="s">·</span><span>Citation feedback loop</span><span class="s">·</span><span>On-device inference</span><span class="s">·</span><span>No API key required</span><span class="s">·</span><span>Closed-form training</span><span class="s">·</span><span>Ridge regression</span><span class="s">·</span><span>Zero cloud dependency</span><span class="s">·</span>
   </div>
 </div>
 
@@ -317,15 +317,15 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 ═══════════════════════════════════════════ -->
 <section class="prov" id="what">
   <div class="prov-in">
-    <p class="prov-lbl r">One package. Two tools.</p>
+    <p class="prov-lbl r">One package. Four models. Two flywheels.</p>
     <h2 class="prov-q r" style="transition-delay:.12s">
       <span class="l1">mnemo doesn't just</span>
       <span class="l2">store memories.</span>
       <span class="l3">It learns from them — right on your machine, every time you consolidate.</span>
     </h2>
     <div class="prov-body r" style="transition-delay:.28s">
-      <p>The <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--mint);">@astermind/astermind-elm</code> package gives mnemo two complementary capabilities: a <strong>TF-IDF vectorizer</strong> that turns memory text into numbers your computer can compare, and an <strong>Extreme Learning Machine</strong> that classifies what kind of memory something is.</p>
-      <p>Both run entirely in Node.js — the same process as the rest of mnemo. No model files to download, no GPU required, no network request. Fast enough to run during a dream cycle without you noticing.</p>
+      <p>The <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--mint);">@astermind/astermind-elm</code> package gives mnemo its <strong>Extreme Learning Machine</strong> — and mnemo trains four of them on your data: a <strong>type classifier</strong> that labels new memories, two <strong>pre-screeners</strong> that clear obvious non-conflicts before they cost an LLM call, and a <strong>recall reranker</strong> that learns which memories you actually use. A <strong>TF-IDF vectorizer</strong> rounds out the package as the zero-setup embedding fallback.</p>
+      <p>All of it runs entirely in Node.js — the same process as the rest of mnemo. No model files to download, no GPU required, no network request. Training is closed-form (milliseconds), so all four models retrain during every dream cycle without you noticing.</p>
     </div>
   </div>
 </section>
@@ -337,12 +337,13 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
   <div class="tools">
     <div class="tools-hd r">
       <div class="eye">What's in the package</div>
-      <h2>Two tools.<br><em>Both running locally.</em></h2>
-      <p>mnemo installs <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--mint);">@astermind/astermind-elm</code> as its only ML dependency. Inside that package are the two pieces below — and mnemo uses exactly one from each.</p>
+      <h2>Two primitives.<br><em>One powers four models. One stands by.</em></h2>
+      <p>mnemo installs <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--mint);">@astermind/astermind-elm</code> as its only ML dependency. The ELM primitive below is instantiated four times — type classifier, two consolidation pre-screeners, recall reranker — each trained on a different slice of your data.</p>
     </div>
     <div class="tools-grid r" style="transition-delay:.15s">
       <div class="tool-card" style="--tc:var(--mint);">
         <div class="tool-badge">Tool 1 — Embeddings</div>
+        <div style="display:inline-flex;align-items:center;gap:.4em;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.35);margin-bottom:.6rem;">○ Standby — fallback embedding provider</div>
         <div class="tool-title">TFIDFVectorizer</div>
         <div class="tool-sub">Term Frequency – Inverse Document Frequency</div>
         <p class="tool-desc">Converts a piece of text into a fixed-length list of numbers by measuring how important each word is — both within that specific document and across your entire memory collection. Words that appear everywhere (like "the") get low weight. Words unique to a memory (like "Ollama") get high weight. The result is a <strong>vector</strong>: a precise numeric fingerprint of the content.</p>
@@ -356,15 +357,16 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
       </div>
       <div class="tool-card" style="--tc:var(--purple-fg);">
         <div class="tool-badge" style="background:rgba(108,65,240,.08);border-color:rgba(108,65,240,.2);color:var(--purple-fg);">Tool 2 — Classification</div>
+        <div style="display:inline-flex;align-items:center;gap:.4em;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--green-fg);margin-bottom:.6rem;">● Active — four trained instances</div>
         <div class="tool-title">ELM</div>
         <div class="tool-sub">Extreme Learning Machine</div>
         <p class="tool-desc">A one-hidden-layer neural network with a twist: the hidden weights are <em>randomly set and never adjusted</em>. Only the output layer is trained — and that's just linear algebra (ridge regression). This makes training almost instant (milliseconds, not minutes), completely deterministic with a fixed seed, and surprisingly accurate for small datasets with clear patterns.</p>
         <ul class="tool-detail">
           <li>Random hidden weights (frozen) + learned output weights (ridge regression)</li>
-          <li>Trains in milliseconds on a store with hundreds of memories</li>
+          <li>Trains in milliseconds — all four models retrain every dream cycle</li>
           <li>Closed-form solution: no gradient descent, no learning rate tuning</li>
           <li>Seeded for reproducibility — same data, same model, every time</li>
-          <li>Outputs a softmax probability over all 6 memory types</li>
+          <li>Type classifier · NREM pre-screener · reconcile pre-screener · recall reranker</li>
         </ul>
       </div>
     </div>
@@ -376,8 +378,8 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
 ═══════════════════════════════════════════ -->
 <section class="prins" id="where">
   <div class="prins-hd">
-    <div class="eye r">Where each tool lives in mnemo</div>
-    <h2 class="r" style="font-size:clamp(1.6rem,3.8vw,4rem);font-weight:900;letter-spacing:-.02em;line-height:1.1;margin-top:.8rem;transition-delay:.1s">Two places.<br>Two jobs.<br>Zero overlap.</h2>
+    <div class="eye r">Where each model lives in mnemo</div>
+    <h2 class="r" style="font-size:clamp(1.6rem,3.8vw,4rem);font-weight:900;letter-spacing:-.02em;line-height:1.1;margin-top:.8rem;transition-delay:.1s">Five places.<br>Five jobs.<br>Zero overlap.</h2>
   </div>
 
   <div class="pstack">
@@ -432,10 +434,60 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
       </div>
     </div>
 
+    <!-- PRESCREENER -->
+    <div class="pcard" style="--pac:var(--orange-fg);">
+      <div class="pcard-h">
+        <div class="pnum">03</div>
+        <div>
+          <div class="ptitle">ELM → consolidation pre-screeners</div>
+          <div class="psub">packages/core/src/ml/prescreen.ts · trains + gates during dream()</div>
+        </div>
+        <div class="ptog">+</div>
+      </div>
+      <div class="pbody">
+        <div class="pbody-in">
+          <div class="pdesc">Every LLM verdict from consolidation — merge or skip, supersedes or contradicts or neither — is logged to <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--orange-fg);">adjudication_log</code> with eight cheap pair-features (word overlap, embedding cosine, type match, age delta…). Two ELMs train on those rows during every dream: one for NREM dedup, one for reconcile.<br><br>Once a model beats its baseline on held-out verdicts, it starts pre-screening: a confident SKIP or NONE prediction resolves the pair without an LLM call. The asymmetry is deliberate — the ELM may only short-circuit <em>negative</em> verdicts. A predicted merge or supersession always goes to the LLM, because a wrong positive destroys a memory while a wrong negative just waits for the next dream. And the models never train on their own predictions (source='llm' rows only), so mistakes can't compound.</div>
+          <ul class="plist">
+            <li>Config: <code style="font-family:'Courier New',monospace;font-size:.85em;">ml.prescreen.enabled = true</code></li>
+            <li>Trains in: <code style="font-family:'Courier New',monospace;font-size:.85em;">trainPrescreener(store, phase)</code> during dream</li>
+            <li>Gates in: <code style="font-family:'Courier New',monospace;font-size:.85em;">prescreenPair(phase, a, b)</code> before each LLM call</li>
+            <li>Persists to: <code style="font-family:'Courier New',monospace;font-size:.85em;">~/.mnemo/elm-prescreen-{nrem,reconcile}.json</code></li>
+            <li>Safety: negative verdicts only — merges/supersessions always LLM-confirmed</li>
+            <li>Observability: skipped-call counts land in the dream log stats</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- RERANKER -->
+    <div class="pcard" style="--pac:var(--green-fg);">
+      <div class="pcard-h">
+        <div class="pnum">04</div>
+        <div>
+          <div class="ptitle">ELM → recall reranker</div>
+          <div class="psub">packages/core/src/ml/reranker.ts · trains during dream(), scores every recall</div>
+        </div>
+        <div class="ptog">+</div>
+      </div>
+      <div class="pbody">
+        <div class="pbody-in">
+          <div class="pdesc">When a chat answer cites sources <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--green-fg);">[1]</code>, <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--green-fg);">[3]</code> — those memories were <em>useful</em>. The ones shown but never cited weren't. Both signals land in <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--green-fg);">recall_feedback</code> automatically (the <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--green-fg);">record_use</code> MCP tool adds agent-side positives too).<br><br>The reranker ELM trains on that data — features like BM25 score, embedding cosine, importance, recency, and access count — and at recall time blends its P(used) into the fused ranking as <code style="font-family:'Courier New',monospace;font-size:.9em;color:var(--green-fg);">score × (0.5 + P)</code>. A nudge, never a veto: it can at most halve or 1.5× a score, so it cannot invert a strong lexical+semantic consensus. This is AsterMind's "retrieval that learns" idea applied to mnemo's chat: the LLM still writes the answers, but the ELM decides what they're grounded in — and gets better at it with every conversation.</div>
+          <ul class="plist">
+            <li>Config: <code style="font-family:'Courier New',monospace;font-size:.85em;">ml.rerank.enabled = true</code></li>
+            <li>Trains in: <code style="font-family:'Courier New',monospace;font-size:.85em;">trainReranker(store)</code> during dream</li>
+            <li>Scores in: <code style="font-family:'Courier New',monospace;font-size:.85em;">applyReranker(results)</code> inside recall + searchHybrid</li>
+            <li>Persists to: <code style="font-family:'Courier New',monospace;font-size:.85em;">~/.mnemo/elm-reranker.json</code></li>
+            <li>Measured by: <code style="font-family:'Courier New',monospace;font-size:.85em;">POST /api/eval</code> — BM25 vs hybrid vs reranked on real feedback</li>
+            <li>Fallback: no validated model → ranking is byte-identical to plain RRF</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
     <!-- SILENCED -->
     <div class="pcard" style="--pac:var(--rose-fg);">
       <div class="pcard-h">
-        <div class="pnum">03</div>
+        <div class="pnum">05</div>
         <div>
           <div class="ptitle">The silenced() wrapper — a quiet fix for a loud problem</div>
           <div class="psub">packages/core/src/ml/persist.ts · wraps every AsterMind call</div>
@@ -486,17 +538,16 @@ body::after{content:'';position:fixed;inset:0;background-image:url("data:image/s
   <span class="cm">//   writes vectors to SQLite BLOBs</span>
   <span class="cm">//   saves ~/.mnemo/astermind-model.json</span>
 
-<span class="cm">// 2. Train ELM type classifier</span>
-<span class="ck">if</span> (config.ml?.typeSuggest?.enabled) {
-  <span class="ck">const</span> report = <span class="ci">trainTypeClassifier</span>(store)
-  <span class="cm">// → gets all memories as labeled samples</span>
-  <span class="cm">// → 80/20 train/holdout split (seeded)</span>
-  <span class="cm">// → silenced(() => elm.trainFromData(X, Y))</span>
-  <span class="cm">// → only saves if accuracy > baseline+5%</span>
-  <span class="cm">// → writes ~/.mnemo/elm-type-classifier.json</span>
-}
+<span class="cm">// 2. Train the ELM fleet (each gated on held-out validation)</span>
+<span class="ci">trainTypeClassifier</span>(store)         <span class="cm">// labels → type suggestions</span>
+<span class="ci">trainPrescreener</span>(store, <span class="cs">'nrem'</span>)     <span class="cm">// past LLM verdicts → skip-gates</span>
+<span class="ci">trainPrescreener</span>(store, <span class="cs">'reconcile'</span>)
+<span class="ck">await</span> <span class="ci">trainReranker</span>(store)          <span class="cm">// citation feedback → recall ranking</span>
+  <span class="cm">// → each: 80/20 seeded split, silenced() training</span>
+  <span class="cm">// → only saved if accuracy > baseline+5%</span>
 
-<span class="cm">// 3. NREM dedup, REM cross-link…</span>
+<span class="cm">// 3. NREM dedup — pre-screener clears confident SKIPs first,</span>
+<span class="cm">//    LLM adjudicates the rest; mutations audited to dream_audit</span>
 <span class="ck">await</span> <span class="ci">runNREM</span>(store, graph, memories)
 <span class="ck">await</span> <span class="ci">runREM</span>(store, graph, memories)</pre></div>
     </div>
@@ -608,8 +659,8 @@ store.create({ content, type: finalType, … })</pre></div>
       <div class="slbl">ELM training time<br>on 100 memories</div>
     </div>
     <div class="stat" style="--sac:linear-gradient(135deg,var(--purple),#a78bfa);">
-      <div class="snum">6</div>
-      <div class="slbl">Memory types the<br>classifier recognizes</div>
+      <div class="snum">4</div>
+      <div class="slbl">ELM models retrained<br>every dream cycle</div>
     </div>
     <div class="stat" style="--sac:linear-gradient(135deg,var(--orange),var(--rose));">
       <div class="snum">0</div>
@@ -748,8 +799,8 @@ store.create({ content, type: finalType, … })</pre></div>
     <div class="titem">
       <div class="tnum">04</div>
       <div>
-        <div class="tttl">The flywheel is already turning</div>
-        <p class="tbody">Every LLM consolidation decision (which memories to merge, which contradict, which supersede) gets logged to <code style="font-family:'Courier New',monospace;font-size:.9em;">adjudication_log</code> with its feature vector and verdict. When that table accumulates enough examples, a future consolidation pre-screener can train on them — letting the ELM handle routine merges and reserving the LLM for genuinely ambiguous cases. The table is already at 54 rows.</p>
+        <div class="tttl">Two flywheels, both turning</div>
+        <p class="tbody">Every LLM consolidation decision lands in <code style="font-family:'Courier New',monospace;font-size:.9em;">adjudication_log</code> with its feature vector, verdict, and the model that rendered it (<code style="font-family:'Courier New',monospace;font-size:.9em;">ml.prescreen.excludeModels</code> can drop a weak adjudicator's labels from training). Every chat answer's citations land in <code style="font-family:'Courier New',monospace;font-size:.9em;">recall_feedback</code> — cited sources as positives, shown-but-uncited as true negatives. The pre-screeners and the reranker retrain on this data during every dream and go live the moment they beat their baselines. Using mnemo <em>is</em> training mnemo: consolidations teach the pre-screeners, conversations teach the reranker, and the dashboard's On-device learning panel (or <code style="font-family:'Courier New',monospace;font-size:.9em;">GET /api/ml-status</code>) shows exactly where each model stands.</p>
       </div>
     </div>
   </div>
@@ -763,7 +814,7 @@ store.create({ content, type: finalType, … })</pre></div>
   <div class="clos-in">
     <div class="clos-eye">AsterMind × mnemo</div>
     <h2 class="clos-h r">Local ML that<br>actually <em>earns its place.</em></h2>
-    <p class="clos-p r" style="transition-delay:.15s;">Two tools from one package. One embeds your memories into a searchable space. The other classifies what they mean. Both run on your machine, in milliseconds, with no external dependency — and both step aside the moment they're not confident enough to be useful.</p>
+    <p class="clos-p r" style="transition-delay:.15s;">Four models from one package. One classifies what your memories mean. Two clear the easy consolidation calls so the LLM only sees the hard ones. One learns which memories your conversations actually use, and ranks accordingly. All of them run on your machine, in milliseconds, with no external dependency — and every one of them steps aside the moment it can't beat the baseline.</p>
     <div class="r" style="transition-delay:.3s;">
       <a href="#hero" class="cta">Back to top &nbsp;↑</a>
     </div>

@@ -2,13 +2,30 @@ import type { ViteDevServer } from 'vite';
 import { writeFileSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import { MemoryStore, GraphStore, dream, searchHybrid, readConfig, reloadConfig, reindexEmbeddings, answerFromMemories } from '@mnemo/core';
-import type { MemoryType, EdgeType, MemoryState } from '@mnemo/core';
+import { MemoryStore, GraphStore, dream, searchHybrid, readConfig, reloadConfig, reindexEmbeddings, answerFromMemories, chatWithMemories, condenseQuery, expandConflicts, getMlStatus, evaluateRetrieval, edgeDegrees, listAudit, restoreMutation } from '@mnemo/core';
+import type { MemoryType, EdgeType, MemoryState, ChatMessage } from '@mnemo/core';
 
 /** Drop the vector BLOB before serializing a memory to the client. */
 function stripEmb(m: any): any {
   const { embedding, ...rest } = m;
   return rest;
+}
+
+/**
+ * Record which retrieved memories the LLM actually cited ([1], [2], …) as
+ * recall_feedback — the recall reranker's training signal, with no manual
+ * record_use call needed. Cited sources are positives; the sources shown but
+ * NOT cited are logged as true negatives (used=0). Impressions are only logged
+ * when at least one citation exists: an answer with zero citations usually
+ * means "no stored memory answers that", which says the query was unanswerable,
+ * not that the retrieval was wrong.
+ */
+export function recordCitationFeedback(store: MemoryStore, query: string, answer: string | null, sources: { memory: any }[]): void {
+  if (!answer || !query.trim()) return;
+  const cited = new Set<number>();
+  for (const m of answer.matchAll(/\[(\d{1,2})\]/g)) cited.add(Number(m[1]));
+  if (cited.size === 0) return;
+  sources.forEach((src, i) => store.recordFeedback(query, src.memory.id, cited.has(i + 1)));
 }
 
 // Helper to parse JSON body from Node.js IncomingMessage
@@ -67,6 +84,43 @@ export function createApiHandler(store: MemoryStore, graph: GraphStore) {
             const encoded = (store.db.prepare('SELECT COUNT(*) n FROM memories WHERE embedding IS NOT NULL').get() as { n: number }).n;
             res.statusCode = 200;
             res.end(JSON.stringify({ ...status, embeddings: { provider, encoded } }));
+            return;
+          }
+
+          // GET /api/ml-status - model validation reports + training-data counts
+          if (req.method === 'GET' && path === '/api/ml-status') {
+            res.statusCode = 200;
+            res.end(JSON.stringify(getMlStatus(store)));
+            return;
+          }
+
+          // POST /api/eval - BM25 vs hybrid vs reranked over recall_feedback ground truth
+          if (req.method === 'POST' && path === '/api/eval') {
+            const report = await evaluateRetrieval(store);
+            res.statusCode = 200;
+            res.end(JSON.stringify(report));
+            return;
+          }
+
+          // GET /api/dream-audit - reversible consolidation mutations (undo list)
+          if (req.method === 'GET' && path === '/api/dream-audit') {
+            res.statusCode = 200;
+            res.end(JSON.stringify(listAudit(store, { limit: 20 })));
+            return;
+          }
+
+          // POST /api/dream-audit/restore - reverse one mutation by mutation_id
+          if (req.method === 'POST' && path === '/api/dream-audit/restore') {
+            const restoreBody = await parseBody(req);
+            const mutationId = (restoreBody.mutation_id || '').trim();
+            if (!mutationId) {
+              res.statusCode = 400;
+              res.end(JSON.stringify({ error: 'mutation_id required' }));
+              return;
+            }
+            const result = restoreMutation(store, graph, mutationId);
+            res.statusCode = result.restored ? 200 : 404;
+            res.end(JSON.stringify(result));
             return;
           }
 
@@ -171,6 +225,7 @@ export function createApiHandler(store: MemoryStore, graph: GraphStore) {
             const types = typesStr ? (typesStr.split(',') as MemoryType[]) : undefined;
             const states = statesStr ? (statesStr.split(',') as MemoryState[]) : undefined;
             const tags = tagsStr ? tagsStr.split(',') : undefined;
+            const sort = url.searchParams.get('sort') || 'importance';
 
             // Scope filtering: 'all' (or empty) applies no scope restriction;
             // any other value is an exact-match against the stored scope string
@@ -194,7 +249,9 @@ export function createApiHandler(store: MemoryStore, graph: GraphStore) {
               queryParams.push(...types);
             }
 
-            sql += ` ORDER BY importance DESC, created_at DESC`;
+            sql += sort === 'recent'
+              ? ` ORDER BY created_at DESC`
+              : ` ORDER BY importance DESC, created_at DESC`;
 
             const rows = store.db.prepare(sql).all(...queryParams) as any[];
             // Keep the embedding BLOB here for hybrid ranking; strip it only
@@ -417,6 +474,38 @@ export function createApiHandler(store: MemoryStore, graph: GraphStore) {
               return;
             }
 
+            // POST /api/chat - multi-turn RAG chat; retrieves fresh memories each turn
+            if (path === '/api/chat') {
+              const messages: ChatMessage[] = Array.isArray(body.messages) ? body.messages : [];
+              if (messages.length === 0) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: 'messages required' }));
+                return;
+              }
+              const scopeFilter = (!body.scope || body.scope === 'all') ? undefined : body.scope as string;
+              // Retrieve with a standalone query: follow-ups ("tell me more about
+              // that") are LLM-rewritten against the conversation; first turns and
+              // no-LLM setups fall through to the raw latest message.
+              const query = await condenseQuery(messages);
+              let sql = `SELECT * FROM memories WHERE state IN ('active','dormant')`;
+              const qp: any[] = [];
+              if (scopeFilter) { sql += ' AND scope = ?'; qp.push(scopeFilter); }
+              const rows = store.db.prepare(sql).all(...qp) as any[];
+              const parsed = rows
+                .map(r => ({ ...r, tags: JSON.parse(r.tags), metadata: JSON.parse(r.metadata) }))
+                // Never ground an answer in a fact reconcile has marked outdated.
+                .filter(m => !m.superseded_by);
+              const top = await searchHybrid(parsed, query, 6, edgeDegrees(store));
+              // Pull in known contradiction partners so the answer presents
+              // both sides; sources/citations index into the expanded list.
+              const grounded = expandConflicts(store, graph, top.map(t => t.memory));
+              const message = await chatWithMemories(messages, grounded.memories, undefined, grounded.conflicts);
+              recordCitationFeedback(store, query, message, grounded.memories.map(m => ({ memory: m })));
+              res.statusCode = 200;
+              res.end(JSON.stringify({ message, sources: grounded.memories.map(stripEmb), conflicts: grounded.conflicts }));
+              return;
+            }
+
             // POST /api/ask - retrieve (scoped, hybrid) + synthesize a plain-language answer
             if (path === '/api/ask') {
               const query = (body.query || '').trim();
@@ -431,11 +520,16 @@ export function createApiHandler(store: MemoryStore, graph: GraphStore) {
               const qp: any[] = [];
               if (scopeFilter) { sql += ' AND scope = ?'; qp.push(scopeFilter); }
               const rows = store.db.prepare(sql).all(...qp) as any[];
-              const parsed = rows.map(r => ({ ...r, tags: JSON.parse(r.tags), metadata: JSON.parse(r.metadata) }));
-              const top = await searchHybrid(parsed, query, 6);
-              const answer = await answerFromMemories(query, top.map(t => t.memory));
+              const parsed = rows
+                .map(r => ({ ...r, tags: JSON.parse(r.tags), metadata: JSON.parse(r.metadata) }))
+                // Never ground an answer in a fact reconcile has marked outdated.
+                .filter(m => !m.superseded_by);
+              const top = await searchHybrid(parsed, query, 6, edgeDegrees(store));
+              const grounded = expandConflicts(store, graph, top.map(t => t.memory));
+              const answer = await answerFromMemories(query, grounded.memories, undefined, grounded.conflicts);
+              recordCitationFeedback(store, query, answer, grounded.memories.map(m => ({ memory: m })));
               res.statusCode = 200;
-              res.end(JSON.stringify({ answer, sources: top.map(t => stripEmb(t.memory)) }));
+              res.end(JSON.stringify({ answer, sources: grounded.memories.map(stripEmb), conflicts: grounded.conflicts }));
               return;
             }
           }

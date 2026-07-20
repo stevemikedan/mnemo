@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { MemoryStore, GraphStore } from '@mnemo/core';
-import { createApiHandler } from '../src-server/api.js';
+import { createApiHandler, recordCitationFeedback } from '../src-server/api.js';
 
 // Drives the real /api/* handler over a live HTTP server against a :memory:
 // store, so routing, body parsing, scope filtering, and serialization are all
@@ -17,7 +17,7 @@ let tmp: string;
 
 beforeAll(async () => {
   tmp = mkdtempSync(join(tmpdir(), 'mnemo-web-'));
-  writeFileSync(join(tmp, 'config.json'), JSON.stringify({ embeddings: { provider: 'none' } }));
+  writeFileSync(join(tmp, 'config.json'), JSON.stringify({ embeddings: { provider: 'none' }, consolidation: { provider: 'none' } }));
   process.env.MNEMO_CONFIG_PATH = join(tmp, 'config.json');
 
   store = new MemoryStore(':memory:');
@@ -119,6 +119,65 @@ describe('POST /api/reindex-embeddings', () => {
   it('is a safe no-op with no provider configured', async () => {
     const r = await post('/api/reindex-embeddings', {});
     expect(r.body).toEqual({ provider: 'none', cleared: 0, embedded: 0 });
+  });
+});
+
+describe('citation feedback (reranker training signal)', () => {
+  it('logs cited sources as positives and shown-but-uncited ones as negatives', () => {
+    const a = store.create({ content: 'cited first', scope: 'global' });
+    const b = store.create({ content: 'never cited', scope: 'global' });
+    const c = store.create({ content: 'cited second', scope: 'global' });
+    recordCitationFeedback(store, 'which sources?', 'Per [1] and [3], yes [3]. [9] is out of range.',
+      [{ memory: a }, { memory: b }, { memory: c }]);
+    const rows = store.db.prepare(
+      `SELECT memory_id, used FROM recall_feedback WHERE query = 'which sources?'`,
+    ).all() as { memory_id: string; used: number }[];
+    const byId = new Map(rows.map(r => [r.memory_id, r.used]));
+    expect(byId.get(a.id)).toBe(1);
+    expect(byId.get(b.id)).toBe(0); // impression: shown, not cited → true negative
+    expect(byId.get(c.id)).toBe(1);
+    expect(rows.length).toBe(3);
+  });
+
+  it('records nothing when the answer is null or cites no sources at all', () => {
+    const m = store.create({ content: 'x', scope: 'global' });
+    recordCitationFeedback(store, 'q-null', null, [{ memory: m }]);
+    recordCitationFeedback(store, 'q-uncited', 'No stored memory answers that.', [{ memory: m }]);
+    const n = store.db.prepare(
+      `SELECT COUNT(*) AS n FROM recall_feedback WHERE query IN ('q-null','q-uncited')`,
+    ).get() as { n: number };
+    expect(n.n).toBe(0);
+  });
+
+  it('POST /api/chat with no LLM returns null message and records no feedback', async () => {
+    const r = await post('/api/chat', { messages: [{ role: 'user', content: 'anything at all' }] });
+    expect(r.status).toBe(200);
+    expect(r.body.message).toBeNull();
+    const n = store.db.prepare(`SELECT COUNT(*) AS n FROM recall_feedback`).get() as { n: number };
+    // Only the rows inserted by the direct unit tests above (2 cited + 1 impression).
+    expect(n.n).toBe(3);
+  });
+});
+
+describe('ML observability endpoints', () => {
+  it('GET /api/ml-status reports models and training-data counts', async () => {
+    const s = await getJson('/api/ml-status');
+    expect(Object.keys(s.models).sort()).toEqual(['prescreenNrem', 'prescreenReconcile', 'reranker', 'typeClassifier']);
+    expect(typeof s.trainingData.feedbackUsed).toBe('number');
+    expect(typeof s.trainingData.feedbackSkipped).toBe('number');
+    expect(s.llm).toHaveProperty('consolidationModel');
+    expect(s.llm).toHaveProperty('reconcileModel');
+    expect(typeof s.llm.lastDreamFallbacks).toBe('number');
+  });
+
+  it('POST /api/eval runs the retrieval eval (empty ground truth → 0 queries)', async () => {
+    // recall_feedback rows exist from the citation tests, but chat feedback
+    // memories may be deleted by then; either way the endpoint returns a report.
+    const r = await post('/api/eval', {});
+    expect(r.status).toBe(200);
+    expect(r.body).toHaveProperty('queries');
+    expect(r.body).toHaveProperty('bm25');
+    expect(r.body).toHaveProperty('reranked');
   });
 });
 

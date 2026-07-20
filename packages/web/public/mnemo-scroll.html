@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>mnemo — How It Works</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,400;0,700;0,900;1,400&family=Montserrat:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#09090f;--bg2:#0f1018;--bg3:#161722;--bg4:#1e2030;
+  --border:#2a2d40;--border2:#3a3e58;
+  --text:#c8cde8;--text2:#8891b8;--text3:#545a7a;
+  --white:#fff;
+  --mint:#4fffb0;--mint2:rgba(79,255,176,.12);--mint3:rgba(79,255,176,.06);
+  --purple:#8b5cf6;--purple2:rgba(139,92,246,.15);--purple3:rgba(139,92,246,.07);
+  --rose:#f43f5e;--rose2:rgba(244,63,94,.12);
+  --amber:#f59e0b;--amber2:rgba(245,158,11,.12);
+  --sky:#0ea5e9;--sky2:rgba(14,165,233,.12);
+  --emerald:#10b981;--emerald2:rgba(16,185,129,.12);
+  --indigo:#6366f1;--indigo2:rgba(99,102,241,.12);
+  --green:#22c55e;--green2:rgba(34,197,94,.12);
+  --ff-head:'Montserrat',sans-serif;
+  --ff-body:'Merriweather',serif;
+  --ff-mono:'JetBrains Mono',monospace;
+  --r:1rem;--r2:1.5rem;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;background:var(--bg);color:var(--text);font-family:var(--ff-body);font-size:16px;line-height:1.75;-webkit-font-smoothing:antialiased}
+body{min-height:100vh}
+a{color:var(--mint);text-decoration:none}a:hover{text-decoration:underline}
+code{font-family:var(--ff-mono);font-size:.82em;color:var(--mint);background:rgba(79,255,176,.08);padding:.1em .4em;border-radius:.3em}
+strong{color:var(--white);font-weight:700}
+h1,h2,h3,h4{font-family:var(--ff-head);letter-spacing:-.02em;line-height:1.1}
+
+/* Scroll reveal */
+.r{opacity:0;transform:translateY(22px);transition:opacity .6s ease,transform .6s ease}
+.r.vis{opacity:1;transform:none}
+
+/* ─── NAV ─── */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(9,9,15,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);height:54px;display:flex;align-items:center;padding:0 clamp(1rem,5vw,4rem);gap:2rem}
+.nav-brand{font-family:var(--ff-head);font-weight:900;font-size:1.1rem;color:var(--white);letter-spacing:-.03em}
+.nav-links{display:flex;gap:1.5rem;list-style:none;flex:1;overflow:hidden}
+.nav-links a{font-family:var(--ff-head);font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text2);text-decoration:none;white-space:nowrap;transition:color .2s}
+.nav-links a:hover{color:var(--mint)}
+.nav-back{margin-left:auto;font-family:var(--ff-head);font-size:.72rem;font-weight:700;color:var(--text3);text-decoration:none;letter-spacing:.05em;text-transform:uppercase;transition:color .2s;white-space:nowrap}
+.nav-back:hover{color:var(--text)}
+
+/* ─── HERO ─── */
+#hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:100px clamp(1.5rem,8vw,7rem) 80px;position:relative;overflow:hidden}
+.hero-glow{position:absolute;top:-200px;left:-200px;width:700px;height:700px;background:radial-gradient(circle,rgba(99,102,241,.12) 0%,transparent 70%);pointer-events:none}
+.hero-glow2{position:absolute;bottom:-100px;right:-100px;width:500px;height:500px;background:radial-gradient(circle,rgba(79,255,176,.06) 0%,transparent 70%);pointer-events:none}
+.hero-eyebrow{font-family:var(--ff-head);font-size:.75rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--purple);margin-bottom:1.5rem}
+.hero-h1{font-family:var(--ff-head);font-size:clamp(2.4rem,7vw,6rem);font-weight:900;letter-spacing:-.04em;line-height:1.0;color:var(--white);margin-bottom:1.5rem}
+.hero-h1 em{font-style:normal;color:var(--mint)}
+.hero-sub{font-size:1.1rem;line-height:1.8;color:var(--text2);max-width:620px;margin-bottom:2.5rem}
+.hero-pills{display:flex;flex-wrap:wrap;gap:.6rem}
+.hpill{font-family:var(--ff-head);font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:.35em 1em;border-radius:99px;border:1px solid}
+.hpill.mint{color:var(--mint);border-color:rgba(79,255,176,.3);background:var(--mint2)}
+.hpill.purple{color:var(--purple);border-color:rgba(139,92,246,.3);background:var(--purple2)}
+.hpill.amber{color:var(--amber);border-color:rgba(245,158,11,.3);background:var(--amber2)}
+.hpill.sky{color:var(--sky);border-color:rgba(14,165,233,.3);background:var(--sky2)}
+
+/* ─── TICKER ─── */
+.ticker{padding:1rem 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);overflow:hidden;white-space:nowrap}
+.ticker-inner{display:inline-flex;gap:0;animation:ticker-scroll 35s linear infinite}
+.ticker-inner span{font-family:var(--ff-head);font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);padding:0 1.5rem}
+.ticker-inner .s{color:var(--border2)}
+@keyframes ticker-scroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+
+/* ─── SECTIONS ─── */
+section{padding:clamp(3rem,8vh,7rem) clamp(1.5rem,8vw,7rem)}
+section+section{border-top:1px solid var(--border)}
+.eye{font-family:var(--ff-head);font-size:.7rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:1rem}
+.sec-h2{font-family:var(--ff-head);font-size:clamp(1.8rem,4vw,3.5rem);font-weight:900;color:var(--white);margin-bottom:1.2rem}
+.sec-h2 em{font-style:normal;color:var(--mint)}
+.sec-lead{font-size:1rem;line-height:1.8;color:var(--text2);max-width:700px;margin-bottom:2.5rem}
+
+/* ─── CARDS GRID ─── */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem}
+.card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:1.5rem}
+.card-icon{font-size:1.5rem;margin-bottom:.8rem}
+.card-title{font-family:var(--ff-head);font-size:1rem;font-weight:800;color:var(--white);margin-bottom:.5rem}
+.card-body{font-size:.88rem;line-height:1.75;color:var(--text2)}
+.card.accent-mint{border-left:3px solid var(--mint)}
+.card.accent-purple{border-left:3px solid var(--purple)}
+.card.accent-amber{border-left:3px solid var(--amber)}
+.card.accent-sky{border-left:3px solid var(--sky)}
+.card.accent-emerald{border-left:3px solid var(--emerald)}
+.card.accent-rose{border-left:3px solid var(--rose)}
+.card.accent-indigo{border-left:3px solid var(--indigo)}
+
+/* ─── TWO-COL ─── */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:start}
+@media(max-width:800px){.two-col{grid-template-columns:1fr}}
+
+/* ─── CODE BLOCK ─── */
+.codeblock{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:1.5rem;overflow-x:auto;font-family:var(--ff-mono);font-size:.82rem;line-height:1.75;color:var(--text)}
+.codeblock .cm{color:var(--text3)}
+.codeblock .ck{color:var(--purple)}
+.codeblock .cs{color:var(--mint)}
+.codeblock .cn{color:var(--amber)}
+.codeblock .ci{color:var(--sky)}
+
+/* ─── TABLE ─── */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th{font-family:var(--ff-head);font-size:.7rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);padding:.75rem 1rem;text-align:left;border-bottom:2px solid var(--border)}
+td{padding:.75rem 1rem;border-bottom:1px solid var(--border);color:var(--text);line-height:1.5}
+tr:hover td{background:var(--bg3)}
+.badge-on{display:inline-flex;align-items:center;gap:.3em;font-family:var(--ff-head);font-size:.6rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:.2em .7em;border-radius:99px;background:var(--green2);color:var(--green);border:1px solid rgba(34,197,94,.3)}
+.badge-off{display:inline-flex;align-items:center;gap:.3em;font-family:var(--ff-head);font-size:.6rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:.2em .7em;border-radius:99px;background:var(--bg4);color:var(--text3);border:1px solid var(--border)}
+
+/* ─── PIPELINE VIZ ─── */
+.pipeline{display:flex;flex-direction:column;gap:0}
+.pipe-stage{display:flex;align-items:stretch;gap:1rem;position:relative}
+.pipe-stage+.pipe-stage::before{content:'';position:absolute;left:1.7rem;top:-1px;width:2px;height:calc(100% + 0px);background:var(--border);z-index:0}
+.pipe-dot{width:3.5rem;height:3.5rem;border-radius:50%;border:2px solid;display:flex;align-items:center;justify-content:center;font-family:var(--ff-head);font-size:.85rem;font-weight:900;flex-shrink:0;position:relative;z-index:1;background:var(--bg)}
+.pipe-body{flex:1;padding:0 0 2rem}
+.pipe-stage:last-child .pipe-body{padding-bottom:0}
+.pipe-label{font-family:var(--ff-head);font-size:.95rem;font-weight:800;color:var(--white);margin-bottom:.3rem}
+.pipe-desc{font-size:.88rem;line-height:1.75;color:var(--text2)}
+
+/* ─── TYPE PILLS ─── */
+.type-pills{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1rem}
+.tp{font-family:var(--ff-head);font-size:.72rem;font-weight:700;letter-spacing:.05em;padding:.35em 1em;border-radius:99px;border:1px solid}
+
+/* ─── CLOSING ─── */
+.closing{padding:clamp(4rem,10vh,8rem) clamp(1.5rem,8vw,7rem);text-align:center;border-top:1px solid var(--border)}
+.closing-h{font-family:var(--ff-head);font-size:clamp(1.8rem,4vw,3rem);font-weight:900;color:var(--white);margin-bottom:1rem}
+.closing-h em{color:var(--mint);font-style:normal}
+.closing-p{font-size:1rem;color:var(--text2);max-width:560px;margin:0 auto 2rem}
+.cta{display:inline-flex;align-items:center;gap:.5em;font-family:var(--ff-head);font-size:.85rem;font-weight:800;letter-spacing:.04em;padding:.7em 1.8em;border-radius:99px;border:1px solid rgba(79,255,176,.35);background:var(--mint2);color:var(--mint);cursor:pointer;text-decoration:none;transition:background .2s,border-color .2s}
+.cta:hover{background:rgba(79,255,176,.2);border-color:rgba(79,255,176,.6)}
+
+/* ─── ACCENT TEXT ─── */
+.acc-mint{color:var(--mint)}.acc-purple{color:var(--purple)}.acc-amber{color:var(--amber)}.acc-sky{color:var(--sky)}.acc-rose{color:var(--rose)}.acc-emerald{color:var(--emerald)}.acc-indigo{color:var(--indigo)}
+
+/* ─── SCROLL INDICATOR ─── */
+.scroll-ind{position:absolute;bottom:2.5rem;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:.5rem;animation:bounce 2.5s ease-in-out infinite}
+.scroll-ind span{font-family:var(--ff-head);font-size:.65rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)}
+@keyframes bounce{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(6px)}}
+
+/* ─── CANVAS ─── */
+#particle-canvas{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;opacity:.25;z-index:0}
+section,nav,#hero,#ticker,.closing{position:relative;z-index:1}
+</style>
+</head>
+<body>
+
+<canvas id="particle-canvas"></canvas>
+
+<!-- NAV -->
+<nav>
+  <span class="nav-brand">mnemo</span>
+  <ul class="nav-links">
+    <li><a href="#memories">Memories</a></li>
+    <li><a href="#dream">Dream</a></li>
+    <li><a href="#graph">Graph</a></li>
+    <li><a href="#retrieval">Retrieval</a></li>
+    <li><a href="#chat">Chat</a></li>
+    <li><a href="#ml">ML</a></li>
+    <li><a href="#mcp">MCP</a></li>
+    <li><a href="#config">Config</a></li>
+  </ul>
+  <a href="/" class="nav-back">← Dashboard</a>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-glow"></div>
+  <div class="hero-glow2"></div>
+  <div class="hero-eyebrow r">Full architecture walkthrough</div>
+  <h1 class="hero-h1 r" style="transition-delay:.1s">
+    Everything<br>mnemo does.<br><em>How and why.</em>
+  </h1>
+  <p class="hero-sub r" style="transition-delay:.2s">
+    mnemo is a long-term memory store for AI agents — built on SQLite, exposed via MCP, and designed around
+    the biology of human memory: sleep-staged consolidation, decay, reinforcement, and a graph of connections
+    between what you know.
+  </p>
+  <div class="hero-pills r" style="transition-delay:.3s">
+    <span class="hpill mint">SQLite store</span>
+    <span class="hpill purple">MCP server</span>
+    <span class="hpill amber">Sleep consolidation</span>
+    <span class="hpill sky">Hybrid retrieval</span>
+    <span class="hpill mint">Graph edges</span>
+    <span class="hpill purple">Decay & lifecycle</span>
+    <span class="hpill sky">Transformer embeddings</span>
+    <span class="hpill amber">On-device ML</span>
+  </div>
+  <div class="scroll-ind"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v10M4 9l4 4 4-4"/></svg><span>Scroll to explore</span></div>
+</section>
+
+<!-- TICKER -->
+<div id="ticker" class="ticker">
+  <div class="ticker-inner">
+    <span>SQLite</span><span class="s">·</span><span>BM25 keyword search</span><span class="s">·</span><span>Transformer embeddings</span><span class="s">·</span><span>NREM deduplication</span><span class="s">·</span><span>REM cross-linking</span><span class="s">·</span><span>Decay lifecycle</span><span class="s">·</span><span>Contradiction reconciliation</span><span class="s">·</span><span>MCP protocol</span><span class="s">·</span><span>Graph edges</span><span class="s">·</span><span>Scope visibility</span><span class="s">·</span><span>ELM type classifier</span><span class="s">·</span><span>Ollama local inference</span><span class="s">·</span><span>Hybrid RRF retrieval</span><span class="s">·</span><span>Multi-turn RAG chat</span><span class="s">·</span>
+    <span>SQLite</span><span class="s">·</span><span>BM25 keyword search</span><span class="s">·</span><span>Transformer embeddings</span><span class="s">·</span><span>NREM deduplication</span><span class="s">·</span><span>REM cross-linking</span><span class="s">·</span><span>Decay lifecycle</span><span class="s">·</span><span>Contradiction reconciliation</span><span class="s">·</span><span>MCP protocol</span><span class="s">·</span><span>Graph edges</span><span class="s">·</span><span>Scope visibility</span><span class="s">·</span><span>ELM type classifier</span><span class="s">·</span><span>Ollama local inference</span><span class="s">·</span><span>Hybrid RRF retrieval</span><span class="s">·</span><span>Multi-turn RAG chat</span><span class="s">·</span>
+  </div>
+</div>
+
+<!-- 01: MEMORIES -->
+<section id="memories">
+  <div class="eye r">01 — The foundation</div>
+  <h2 class="sec-h2 r" style="transition-delay:.05s">What is a <em>memory</em>?</h2>
+  <p class="sec-lead r" style="transition-delay:.1s">
+    Every fact that matters gets stored as one memory — a single row in a SQLite table with a structured set of fields.
+    Memories aren't free-form blobs. They have types, scopes, importance scores, and a lifecycle that mirrors
+    how biological memory works: active, fading, dormant, gone.
+  </p>
+
+  <div class="two-col r" style="transition-delay:.15s">
+    <div>
+      <h3 style="font-family:var(--ff-head);font-size:1.1rem;font-weight:800;color:var(--white);margin-bottom:1rem">The six memory types</h3>
+      <div class="type-pills">
+        <span class="tp" style="color:var(--sky);border-color:rgba(14,165,233,.3);background:var(--sky2)">project</span>
+        <span class="tp" style="color:var(--amber);border-color:rgba(245,158,11,.3);background:var(--amber2)">user</span>
+        <span class="tp" style="color:var(--rose);border-color:rgba(244,63,94,.3);background:var(--rose2)">feedback</span>
+        <span class="tp" style="color:var(--emerald);border-color:rgba(16,185,129,.3);background:var(--emerald2)">reference</span>
+        <span class="tp" style="color:var(--purple);border-color:rgba(139,92,246,.3);background:var(--purple2)">episodic</span>
+        <span class="tp" style="color:#ec4899;border-color:rgba(236,72,153,.3);background:rgba(236,72,153,.08)">semantic</span>
+      </div>
+      <div style="margin-top:1.2rem;display:flex;flex-direction:column;gap:.7rem">
+        <div style="font-size:.88rem;color:var(--text2)"><span class="acc-sky" style="font-family:var(--ff-head);font-weight:700">project</span> — Architecture decisions, technical choices, constraints, tooling</div>
+        <div style="font-size:.88rem;color:var(--text2)"><span class="acc-amber" style="font-family:var(--ff-head);font-weight:700">user</span> — Preferences, working style, communication patterns</div>
+        <div style="font-size:.88rem;color:var(--text2)"><span class="acc-rose" style="font-family:var(--ff-head);font-weight:700">feedback</span> — Corrections, things to avoid, course-changes</div>
+        <div style="font-size:.88rem;color:var(--text2)"><span class="acc-emerald" style="font-family:var(--ff-head);font-weight:700">reference</span> — File paths, API endpoints, code pointers</div>
+        <div style="font-size:.88rem;color:var(--text2)"><span class="acc-purple" style="font-family:var(--ff-head);font-weight:700">episodic</span> — What happened, when, in which session</div>
+        <div style="font-size:.88rem;color:var(--text2)"><span style="color:#ec4899;font-family:var(--ff-head);font-weight:700">semantic</span> — Concepts, patterns, domain knowledge</div>
+      </div>
+    </div>
+    <div>
+      <h3 style="font-family:var(--ff-head);font-size:1.1rem;font-weight:800;color:var(--white);margin-bottom:1rem">The lifecycle</h3>
+      <div style="display:flex;flex-direction:column;gap:.5rem">
+        <div class="card" style="padding:1rem">
+          <span class="acc-emerald" style="font-family:var(--ff-head);font-size:.8rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em">● Active</span>
+          <p style="font-size:.85rem;color:var(--text2);margin-top:.3rem">Full confidence, returned in all queries, eligible for recall and reinforcement.</p>
+        </div>
+        <div class="card" style="padding:1rem">
+          <span style="color:var(--text2);font-family:var(--ff-head);font-size:.8rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em">◐ Dormant</span>
+          <p style="font-size:.85rem;color:var(--text2);margin-top:.3rem">Confidence fell below 0.5. Still in the store, lower weight in recall. Recalling it revives it.</p>
+        </div>
+        <div class="card" style="padding:1rem">
+          <span style="color:var(--text3);font-family:var(--ff-head);font-size:.8rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em">○ Archived</span>
+          <p style="font-size:.85rem;color:var(--text2);margin-top:.3rem">Rarely accessed, confidence below 0.2. Excluded from most queries unless explicitly requested.</p>
+        </div>
+        <div class="card" style="padding:1rem">
+          <span class="acc-rose" style="font-family:var(--ff-head);font-size:.8rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em">✕ Expired</span>
+          <p style="font-size:.85rem;color:var(--text2);margin-top:.3rem">Confidence dropped below 0.05. Marked expired — not deleted, but invisible in normal queries.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:2.5rem" class="r" style="transition-delay:.2s">
+    <h3 style="font-family:var(--ff-head);font-size:1.1rem;font-weight:800;color:var(--white);margin-bottom:1rem">Scope: where does a memory live?</h3>
+    <div class="cards">
+      <div class="card accent-mint">
+        <div class="card-title">global</div>
+        <div class="card-body">Applies everywhere. User preferences, cross-project patterns, general feedback. Every AI session reads global memories regardless of which project it's in.</div>
+      </div>
+      <div class="card accent-sky">
+        <div class="card-title">project:<em style="color:var(--text2);font-weight:400">/abs/path</em></div>
+        <div class="card-body">Project-specific context — architecture decisions, local config, tech choices for this codebase. Only visible when an agent is working inside this path or a subdirectory.</div>
+      </div>
+    </div>
+    <p style="font-size:.85rem;color:var(--text2);margin-top:1rem">Scope visibility uses path-prefix matching, not simple string equality — an agent in <code>/home/user/proj/src</code> sees memories scoped to <code>project:/home/user/proj</code> without any configuration. Cross-project bleed is strictly prevented.</p>
+  </div>
+</section>
+
+<!-- 02: DREAM / CONSOLIDATION -->
+<section id="dream">
+  <div class="eye r">02 — Consolidation</div>
+  <h2 class="sec-h2 r" style="transition-delay:.05s">The dream.<br><em>Sleep-staged memory processing.</em></h2>
+  <p class="sec-lead r" style="transition-delay:.1s">
+    When you trigger a dream, mnemo runs four sequential processing stages — each inspired by what the sleeping brain does:
+    deduplicate what's redundant, link what's related, decay what's unused, and reconcile what conflicts.
+    A full dream passes in under two seconds on a store of 35+ memories.
+  </p>
+
+  <div class="pipeline r" style="transition-delay:.15s">
+    <div class="pipe-stage">
+      <div class="pipe-dot" style="color:var(--indigo);border-color:var(--indigo)">0</div>
+      <div class="pipe-body">
+        <div class="pipe-label">Encode <span style="color:var(--text3);font-size:.8rem;font-weight:400">(pre-processing)</span></div>
+        <div class="pipe-desc">If an embedding provider is configured, any memories without stored vectors get encoded now. This happens first so every subsequent stage can use cosine similarity alongside keyword overlap.</div>
+      </div>
+    </div>
+    <div class="pipe-stage">
+      <div class="pipe-dot" style="color:var(--purple);border-color:var(--purple)">N</div>
+      <div class="pipe-body">
+        <div class="pipe-label">NREM — Deduplication</div>
+        <div class="pipe-desc">Scans all same-scope memory pairs. High word-overlap (>65%) → merge immediately. Low overlap (<30%) → skip. Middle ground → first the trained pre-screener ELM gets a look: a confident SKIP prediction avoids the LLM call entirely. Otherwise the configured LLM (fast ollama/llama3.2:3b) adjudicates. Merged memories fold the older content into the survivor's text and mark the duplicate archived — with both memories' before-state snapshotted to <code>dream_audit</code> first, so a bad verdict is recoverable.</div>
+      </div>
+    </div>
+    <div class="pipe-stage">
+      <div class="pipe-dot" style="color:var(--mint);border-color:var(--mint)">R</div>
+      <div class="pipe-body">
+        <div class="pipe-label">REM — Cross-linking</div>
+        <div class="pipe-desc">Finds pairs of memories in the same scope that are thematically similar and don't already share an edge. When both memories have stored embeddings, the "related but not duplicate" band is semantic cosine 0.55–0.85 — catching paraphrase relations that share no vocabulary; pairs without vectors fall back to lexical overlap (0.25–0.65). Adds a <code>relates-to</code> edge. This is how the knowledge graph grows naturally over time without manual curation.</div>
+      </div>
+    </div>
+    <div class="pipe-stage">
+      <div class="pipe-dot" style="color:var(--amber);border-color:var(--amber)">D</div>
+      <div class="pipe-body">
+        <div class="pipe-label">Decay — Lifecycle management</div>
+        <div class="pipe-desc">For each memory, computes a <em>retention score</em> based on base half-life (30 days), importance multiplier, and access frequency. If retention falls below the dormant threshold (0.5) → demoted. Below archive threshold (0.2) → archived. Below expire threshold (0.05) → expired. High-importance memories (≥0.9) are pinned — they never decay below active.</div>
+      </div>
+    </div>
+    <div class="pipe-stage">
+      <div class="pipe-dot" style="color:var(--rose);border-color:var(--rose)">C</div>
+      <div class="pipe-body">
+        <div class="pipe-label">Reconcile — Contradiction detection</div>
+        <div class="pipe-desc">Finds same-scope, same-type memory pairs that share enough vocabulary (overlap > 0.2) <em>or</em> enough stored-embedding similarity (cosine ≥ 0.6 — so "deploys via GitHub Actions" vs "CI runs on Jenkins now" gets caught despite zero shared words) and don't already have a relationship edge. The pre-screener ELM clears confident non-conflicts first; the rest go to a high-quality LLM (claude-cli/haiku — separate from the NREM model) to judge: <strong>SUPERSEDES</strong> (newer overrides older, older gets demoted — before-state audited), <strong>CONTRADICTS</strong> (genuine conflict, both preserved with a contradicts edge), or <strong>NONE</strong> (compatible, no edge needed). Capped at 24 pairs per run to bound cost.</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:2.5rem" class="r">
+    <div class="cards">
+      <div class="card accent-purple">
+        <div class="card-title">Split-provider design + fallback chain</div>
+        <div class="card-body">NREM merge decisions use <code>ollama/llama3.2:3b</code> — fast, local, free, good enough for near-duplicate merge calls. Reconcile uses a stronger model (e.g. <code>claude-cli/sonnet</code>) for nuanced contradiction and supersession judgment, where a false positive creates a bad graph edge. A <code>fallback</code> chain makes an aggressive primary safe: if it's unreachable (logged out, rate-limited, offline), the next provider runs, then the built-in heuristic — never a silent skip. Each verdict records the model that <em>actually</em> ran, so training-label filtering stays honest and per-dream fallback counts surface in the dream log.</div>
+      </div>
+      <div class="card accent-amber">
+        <div class="card-title">Adjudication log → pre-screener</div>
+        <div class="card-body">Every LLM verdict (merge, contradiction, supersession) gets logged to <code>adjudication_log</code> with its feature vector and the model that rendered it. Those rows train the pre-screener ELMs during every dream — and once a model beats its baseline on held-out data, confident SKIP/NONE predictions skip the LLM call. Safety asymmetry by design: the ELM may only short-circuit <em>negative</em> verdicts; anything that would merge or demote a memory still gets LLM confirmation.</div>
+      </div>
+      <div class="card accent-emerald">
+        <div class="card-title">Spaced repetition</div>
+        <div class="card-body">Recalling a memory — via search, ask, or any MCP tool that returns it — bumps its <code>access_count</code> and resets <code>last_accessed</code>. The decay formula reads both: accessed memories decay slower, frequently-recalled memories become nearly permanent. This is the same mechanism as spaced repetition flashcard systems, applied to structured facts.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 03: GRAPH -->
+<section id="graph">
+  <div class="eye r">03 — The graph</div>
+  <h2 class="sec-h2 r" style="transition-delay:.05s">Memories connect.<br><em>A knowledge graph grows.</em></h2>
+  <p class="sec-lead r" style="transition-delay:.1s">
+    mnemo isn't a flat list — it's a directed graph. Every memory is a node; relationships between them are typed,
+    weighted edges. The graph makes contradictions visible, shows which facts supersede others,
+    and lets the dashboard render a live map of your knowledge.
+  </p>
+
+  <div class="cards r" style="transition-delay:.15s">
+    <div class="card accent-mint">
+      <div class="card-title">↔ relates-to</div>
+      <div class="card-body">Added automatically by the REM phase when two memories are thematically similar. The most common edge — it's how context clusters form. No semantic value (neither memory is preferred over the other), just "these are about the same thing."</div>
+    </div>
+    <div class="card accent-purple">
+      <div class="card-title">→ supersedes</div>
+      <div class="card-body">Directed: newer→older. Added by reconcile when a newer memory renders an older one outdated. The older memory's importance is dropped to ≤0.15 and its metadata gets a <code>superseded_by</code> pointer. Superseded facts are excluded from recall and chat grounding entirely — an agent asking "how do we deploy?" never gets the fact the system knows is stale (the dashboard browser still shows them).</div>
+    </div>
+    <div class="card accent-rose">
+      <div class="card-title">⚡ contradicts</div>
+      <div class="card-body">Added by reconcile when two memories conflict about the same subject but neither is clearly authoritative (e.g. two different team members' stated preferences that differ). Both are preserved — and when chat or ask retrieves one side, <code>expandConflicts()</code> pulls in the other and instructs the LLM to present both. mnemo doesn't pick a winner, and it doesn't let an answer silently pick one either.</div>
+    </div>
+    <div class="card accent-sky">
+      <div class="card-title">⊂ derived-from</div>
+      <div class="card-body">Set manually: "this memory was extracted from, or is based on, that one." Useful for tracing where a synthesized fact came from. Not set automatically.</div>
+    </div>
+    <div class="card accent-amber">
+      <div class="card-title">⦿ co-occurred</div>
+      <div class="card-body">Two things that appeared in the same context or session. The weakest edge type — no causal or logical relationship implied. Available for manual use; not added automatically by the dream process.</div>
+    </div>
+  </div>
+
+  <div style="margin-top:2rem" class="r">
+    <p style="font-size:.88rem;color:var(--text2);line-height:1.8">
+      Edges are stored in a separate <code>memory_edges</code> table with <code>from_id</code>, <code>to_id</code>, <code>edge_type</code>, and a float <code>weight</code> (0–1). The graph is scoped: edges only form between memories in the same scope or between a project memory and a global memory — never across unrelated projects. Foreign keys + ON DELETE CASCADE keep the graph consistent when memories are deleted.
+    </p>
+  </div>
+</section>
+
+<!-- 04: RETRIEVAL -->
+<section id="retrieval">
+  <div class="eye r">04 — Retrieval</div>
+  <h2 class="sec-h2 r" style="transition-delay:.05s">Finding what matters.<br><em>Hybrid search, ranked by both.</em></h2>
+  <p class="sec-lead r" style="transition-delay:.1s">
+    mnemo uses two retrieval signals — keyword overlap and semantic similarity — fused together using
+    Reciprocal Rank Fusion (RRF). Neither signal alone is sufficient: BM25 misses paraphrases;
+    vectors miss rare exact terms. Together they find the right memories.
+  </p>
+
+  <div class="two-col r" style="transition-delay:.15s">
+    <div>
+      <h3 style="font-family:var(--ff-head);font-size:1rem;font-weight:800;color:var(--white);margin-bottom:.8rem">BM25 — keyword retrieval</h3>
+      <p style="font-size:.88rem;line-height:1.75;color:var(--text2);margin-bottom:1rem">Built from scratch in TypeScript: tokenizes memory content, builds an inverted index, scores with the BM25 formula (TF-IDF with length normalization). Fast, zero dependencies, accurate for exact-term queries.</p>
+      <div class="codeblock">
+<span class="cm">// Score = Σ IDF(t) × TF(t,d) × (k₁+1)</span>
+<span class="cm">//             TF(t,d) + k₁·(1-b+b·|d|/avgdl)</span>
+<span class="cm">// k₁=1.5, b=0.75 (standard values)</span>
+      </div>
+    </div>
+    <div>
+      <h3 style="font-family:var(--ff-head);font-size:1rem;font-weight:800;color:var(--white);margin-bottom:.8rem">Vector — semantic retrieval</h3>
+      <p style="font-size:.88rem;line-height:1.75;color:var(--text2);margin-bottom:1rem">Each memory's embedding (stored as a SQLite BLOB, 768-dim with Ollama/nomic-embed-text) gets cosine-compared against the query embedding at recall time. Finds memories that mean the same thing even with completely different words.</p>
+      <div class="codeblock">
+<span class="cm">// cosine(a, b) = (a·b) / (|a|·|b|)</span>
+<span class="cm">// Stored as Float32Array BLOBs → decode → dot product</span>
+<span class="cm">// Memory access = O(n), ~1ms for 100 memories</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:2rem" class="r">
+    <h3 style="font-family:var(--ff-head);font-size:1rem;font-weight:800;color:var(--white);margin-bottom:.8rem">Reciprocal Rank Fusion (RRF)</h3>
+    <p style="font-size:.88rem;line-height:1.75;color:var(--text2);margin-bottom:1rem">
+      The BM25 ranked list and the vector ranked list are merged using RRF: for each memory, its RRF score is the sum of 1/(rank + k) across both lists (k=60 to de-emphasize very high ranks). A memory that ranks well in both lists gets a strong combined score; one that ranks well in only one still surfaces but lower. The top results are returned after scope filtering and dedup.
+    </p>
+    <div class="codeblock">
+<span class="cm">// RRF score for memory m:</span>
+<span class="ck">const</span> rrf = (<span class="cn">1</span> / (bm25Rank + <span class="cn">60</span>)) + (<span class="cn">1</span> / (vectorRank + <span class="cn">60</span>));
+<span class="cm">// k=60 standard; memories only in one list: rank = ∞ → contribution = 0</span>
+    </div>
+  </div>
+
+  <div style="margin-top:2rem" class="r">
+    <h3 style="font-family:var(--ff-head);font-size:1rem;font-weight:800;color:var(--white);margin-bottom:.8rem">Then the learned reranker gets a vote</h3>
+    <p style="font-size:.88rem;line-height:1.75;color:var(--text2);margin-bottom:1rem">
+      After fusion, a third signal blends in: an on-device ELM trained on <code>recall_feedback</code> — which memories were actually <em>used</em> when previously retrieved (cited by chat answers, or marked via the <code>record_use</code> tool). Its P(used) multiplies the fused score as <code>score × (0.5 + P)</code>, so the model can nudge but never invert a strong BM25+vector consensus. Finally an importance boost applies, which is what sinks reconcile-demoted stale facts. Until the reranker beats its validation baseline, this stage is a byte-identical no-op.
+    </p>
+  </div>
+
+  <div style="margin-top:2rem" class="r">
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>Provider</th><th>Dims</th><th>Algorithm</th><th>Setup</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>none</strong></td><td>—</td><td>BM25 only</td><td>Zero</td><td><span class="badge-off">off</span></td></tr>
+          <tr><td><strong>local</strong></td><td>256</td><td>FNV-1a hashing</td><td>Zero — built-in</td><td><span class="badge-off">fallback</span></td></tr>
+          <tr><td><strong>astermind</strong></td><td>1024</td><td>TF-IDF + stemming + bigrams</td><td>npm only, no server</td><td><span class="badge-off">standby</span></td></tr>
+          <tr><td style="color:var(--green)"><strong>ollama</strong></td><td>768</td><td>nomic-embed-text (12-layer transformer)</td><td>Ollama server on localhost</td><td><span class="badge-on">● active</span></td></tr>
+          <tr><td><strong>openai</strong></td><td>1536+</td><td>text-embedding-3 family</td><td>API key + internet</td><td><span class="badge-off">available</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- 05: CHAT -->
+<section id="chat">
+  <div class="eye r">05 — Conversational access</div>
+  <h2 class="sec-h2 r" style="transition-delay:.05s">Ask your memories.<br><em>Multi-turn RAG chat.</em></h2>
+  <p class="sec-lead r" style="transition-delay:.1s">
+    The mnemo dashboard includes a grounded conversational interface. Every message re-retrieves the most
+    relevant memories for that specific turn, then passes the full conversation history to the LLM alongside
+    that memory context. The store is the session state — no separate chat memory is needed.
+  </p>
+
+  <div class="pipeline r" style="transition-delay:.15s">
+    <div class="pipe-stage">
+      <div class="pipe-dot" style="color:var(--sky);border-color:var(--sky)">1</div>
+      <div class="pipe-body">
+        <div class="pipe-label">User sends a message</div>
+        <div class="pipe-desc">The message is appended to the in-memory conversation thread. The full thread (all prior turns) is kept — the LLM sees the entire history on every call.</div>
+      </div>
+    </div>
+    <div class="pipe-stage">
+      <div class="pipe-dot" style="color:var(--mint);border-color:var(--mint)">2</div>
+      <div class="pipe-body">
+        <div class="pipe-label">Retrieval — per turn, with query rewriting</div>
+        <div class="pipe-desc">On follow-up turns, <code>condenseQuery()</code> first LLM-rewrites the latest message into a standalone query — "tell me more about that" becomes "github actions deployment pipeline" using the conversation to resolve the pronoun. Then <code>searchHybrid()</code> runs the same BM25+vector+reranker retrieval as a normal <code>recall()</code> over candidates with superseded facts filtered out, returning the top 6. This re-runs every turn — as the topic shifts, so does the grounding context.</div>
+      </div>
+    </div>
+    <div class="pipe-stage">
+      <div class="pipe-dot" style="color:var(--purple);border-color:var(--purple)">3</div>
+      <div class="pipe-body">
+        <div class="pipe-label">Memory context injected as system prompt</div>
+        <div class="pipe-desc">First <code>expandConflicts()</code> checks the graph: if a retrieved memory has a <code>contradicts</code> edge, the other side is pulled into the set. Then <code>chatWithMemories()</code> formats everything into a numbered system prompt: <em>"Answer based ONLY on the stored memories below — never invent facts. Cite memories inline as [1], [2]…"</em> — plus a KNOWN CONFLICTS note instructing the LLM to present both sides of any contradiction. The LLM receives this context fresh each turn, not as part of the message history.</div>
+      </div>
+    </div>
+    <div class="pipe-stage">
+      <div class="pipe-dot" style="color:var(--amber);border-color:var(--amber)">4</div>
+      <div class="pipe-body">
+        <div class="pipe-label">LLM synthesizes a grounded reply</div>
+        <div class="pipe-desc">The configured reconcile LLM (same provider as contradiction detection — claude-cli/haiku by default) generates a reply using the memory context and conversation history. It cites memories by index and signals when the memories don't cover the question rather than inventing an answer.</div>
+      </div>
+    </div>
+    <div class="pipe-stage">
+      <div class="pipe-dot" style="color:var(--emerald);border-color:var(--emerald)">5</div>
+      <div class="pipe-body">
+        <div class="pipe-label">Response rendered — and the feedback loop closes</div>
+        <div class="pipe-desc">The assistant reply and source memory cards are appended to the thread (persisted in localStorage across refreshes). Conflicted sources get a ⚠ badge. Then the citations are parsed: sources the answer cited become <code>recall_feedback</code> positives, sources shown but uncited become true negatives — the exact training data the recall reranker learns from during the next dream. Every conversation makes retrieval a little smarter.</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:2rem" class="r">
+    <div class="codeblock"><span class="cm">// packages/core/src/rag/answer.ts</span>
+<span class="ck">export async function</span> <span class="ci">chatWithMemories</span>(
+  messages: <span class="ci">ChatMessage</span>[],          <span class="cm">// full conversation history</span>
+  memories: <span class="ci">Pick</span>&lt;<span class="ci">Memory</span>, <span class="cs">'content'</span> | <span class="cs">'type'</span>&gt;[], <span class="cm">// top-k + conflict partners</span>
+  chat: <span class="ci">Chatter</span> = llmChat,           <span class="cm">// injectable for testing</span>
+  conflicts: [<span class="ck">number</span>, <span class="ck">number</span>][] = [], <span class="cm">// contradicting index pairs</span>
+): <span class="ci">Promise</span>&lt;<span class="ck">string</span> | <span class="ck">null</span>&gt; {
+  <span class="ck">const</span> context = <span class="ci">memoryContext</span>(memories, conflicts);
+  <span class="cm">// numbered memories + "KNOWN CONFLICTS: [2] contradicts [5]…"</span>
+  <span class="ck">const</span> system = <span class="cs">`You are a memory assistant. Answer based ONLY on the stored memories below...</span>
+<span class="cs">STORED MEMORIES:\n${context}`</span>;
+  <span class="ck">return</span> <span class="ci">chat</span>(messages, system); <span class="cm">// full history + fresh context each turn</span>
+}</div>
+  </div>
+
+  <div style="margin-top:2rem" class="r">
+    <div class="cards">
+      <div class="card accent-sky">
+        <div class="card-title">Re-retrieval per turn</div>
+        <div class="card-body">Unlike systems that retrieve once and cache, mnemo re-runs retrieval on every turn — and follow-ups get LLM-rewritten into standalone queries first, so "why though?" retrieves as well as a fully-specified question. As the conversation shifts topics, the grounding context shifts with it automatically.</div>
+      </div>
+      <div class="card accent-purple">
+        <div class="card-title">The store is the session state</div>
+        <div class="card-body">There's no separate "chat memory" that needs to be maintained or flushed. The conversation history lives in the browser (localStorage, surviving refreshes); the long-term memory lives in mnemo. They're cleanly separated — chat context for coherence, mnemo for grounding.</div>
+      </div>
+      <div class="card accent-mint">
+        <div class="card-title">Same LLM as reconcile</div>
+        <div class="card-body">Chat uses <code>llmChat()</code>, which routes through the reconcile provider (not the faster NREM provider). That means claude-cli/haiku by default — a quality model, not the lightweight merge model. The <code>Chatter</code> interface is fully injectable for testing without a live LLM.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 06: ML -->
+<section id="ml">
+  <div class="eye r">06 — On-device ML</div>
+  <h2 class="sec-h2 r" style="transition-delay:.05s">Intelligence at the edge.<br><em>AsterMind ELM + nomic embeddings.</em></h2>
+  <p class="sec-lead r" style="transition-delay:.1s">
+    mnemo uses the <code>@astermind/astermind-elm</code> package for on-device ML — no cloud, no model download,
+    no GPU. Four ELM models train during every dream, each gated behind held-out validation: a type classifier,
+    two consolidation pre-screeners, and a recall reranker. A fifth component (the TF-IDF vectorizer) stands by
+    as the fallback embedding provider.
+  </p>
+
+  <div class="cards r" style="transition-delay:.15s">
+    <div class="card accent-purple">
+      <div class="card-title">● Type classifier</div>
+      <div class="card-body">A one-hidden-layer neural network with randomly-frozen weights (the ELM trick). Only the output layer is trained — via ridge regression, not gradient descent. When you call <code>remember(content)</code> without specifying a type, the ELM suggests one if it's confident enough (measured by the margin between top-class and runner-up probabilities). The calling agent is told what was inferred and can always override.</div>
+    </div>
+    <div class="card accent-rose">
+      <div class="card-title">● Consolidation pre-screeners</div>
+      <div class="card-body">Two ELMs (one per phase) trained on <code>adjudication_log</code> — every past LLM verdict with its cheap pair-features. During dreams, a confident SKIP/NONE prediction skips the LLM call entirely. Deliberately asymmetric: the ELM may only short-circuit negative verdicts; predicted merges and supersessions always get LLM confirmation, because a wrong positive destroys data while a wrong negative just waits a cycle.</div>
+    </div>
+    <div class="card accent-sky">
+      <div class="card-title">● Recall reranker</div>
+      <div class="card-body">Trained on <code>recall_feedback</code>: which retrieved memories actually got used — cited by chat answers (positives), shown-but-uncited (true negatives), or marked via <code>record_use</code>. At recall time its P(used) blends into the fused score as <code>score × (0.5 + P)</code> — a nudge, never a veto. This is retrieval that learns your usage patterns, entirely on-device.</div>
+    </div>
+    <div class="card accent-mint">
+      <div class="card-title">○ Standby: TFIDFVectorizer</div>
+      <div class="card-body">AsterMind's TF-IDF vectorizer is the fallback embedding provider — available when Ollama isn't running. Set <code>embeddings.provider = "astermind"</code> to activate it. With Ollama active, this code path is dormant: its snapshot file lives at <code>~/.mnemo/astermind-model.json</code> but is never loaded.</div>
+    </div>
+  </div>
+
+  <div style="margin-top:2rem" class="r">
+    <h3 style="font-family:var(--ff-head);font-size:1rem;font-weight:800;color:var(--white);margin-bottom:.8rem">How the ELM uses nomic embeddings</h3>
+    <p style="font-size:.88rem;line-height:1.75;color:var(--text2);margin-bottom:1rem">With Ollama active, the ELM trains on 768-dim nomic vectors stored in the database — not on TF-IDF features. At predict time, <code>suggestType(content)</code> calls <code>embedText()</code> via Ollama to get the feature vector, then passes it to the ELM's frozen hidden layer and trained output weights. AsterMind provides the ML architecture (random projection + ridge regression); nomic provides the semantic representation.</p>
+    <div class="codeblock">
+<span class="cm">// dream() — training path</span>
+<span class="ck">await</span> <span class="ci">encodeForDream</span>(store, memories);   <span class="cm">// encode via ollama/nomic</span>
+<span class="ci">trainTypeClassifier</span>(store);               <span class="cm">// ELM trains on stored 768-dim blobs</span>
+
+<span class="cm">// remember() — predict path (async)</span>
+<span class="ck">const</span> vecs = <span class="ck">await</span> <span class="ci">embedText</span>([content]);  <span class="cm">// 768-dim via ollama</span>
+<span class="ck">const</span> pred = clf.<span class="ci">predict</span>(vecs[<span class="cn">0</span>]);         <span class="cm">// ELM predict (sync)</span>
+<span class="ck">if</span> (pred.margin > <span class="cn">0.1</span>) suggest(pred.label); <span class="cm">// margin gate, not confidence</span>
+    </div>
+    <p style="font-size:.85rem;color:var(--text2);margin-top:.8rem">
+      The ELM only persists to disk if its held-out accuracy beats the majority-class baseline. On small or single-category stores, "do nothing" is the correct outcome. The model is never trusted silently — it annotates, never overwrites.
+    </p>
+    <p style="margin-top:.8rem"><a href="/astermind-scroll.html" target="_blank" style="font-family:var(--ff-head);font-size:.82rem;font-weight:700;color:var(--purple)">Deep dive: the AsterMind ML scroll →</a></p>
+  </div>
+
+  <div style="margin-top:2rem" class="r">
+    <h3 style="font-family:var(--ff-head);font-size:1rem;font-weight:800;color:var(--white);margin-bottom:.8rem">Two flywheels, both turning</h3>
+    <p style="font-size:.88rem;line-height:1.75;color:var(--text2);margin-bottom:1rem">
+      Every LLM consolidation verdict feeds <code>adjudication_log</code>; every chat answer's citations feed <code>recall_feedback</code>. Both models retrain on that data during every dream — closed-form, milliseconds — and each persists only when it beats its majority-class baseline on a held-out split. Until then, behavior is byte-identical to having no model at all. The pre-screeners never train on their own predictions (<code>source='llm'</code> rows only), so mistakes can't compound.
+    </p>
+    <p style="font-size:.88rem;line-height:1.75;color:var(--text2)">
+      Watch it happen: the dashboard's <strong>On-device learning</strong> panel shows each model's status (off / learning / live with accuracy), and the <strong>Evaluate retrieval</strong> button scores BM25-only vs hybrid vs reranked on your real feedback data (recall@5, MRR) — so "is the ML earning its keep?" is answered with measurements, not vibes. The same data is available at <code>GET /api/ml-status</code> and <code>POST /api/eval</code>.
+    </p>
+  </div>
+</section>
+
+<!-- 06: MCP -->
+<section id="mcp">
+  <div class="eye r">07 — The MCP interface</div>
+  <h2 class="sec-h2 r" style="transition-delay:.05s">What AI agents can do.<br><em>Seventeen tools over stdio.</em></h2>
+  <p class="sec-lead r" style="transition-delay:.1s">
+    mnemo runs as a Model Context Protocol server — a local process that speaks JSON-RPC over stdio.
+    Claude, Cursor, and any other MCP-compatible tool connect to it and can read, write, and consolidate
+    memories as part of their normal work. No API keys, no cloud, no configuration per-agent.
+  </p>
+
+  <div class="cards r" style="transition-delay:.15s">
+    <div class="card accent-mint">
+      <div class="card-title">remember(content, type?, scope?, tags?, importance?)</div>
+      <div class="card-body">Store a new memory. Type can be omitted — if the ELM classifier is active and confident, it suggests one. Dedup warning fires if a near-duplicate already exists (write-time check, never blocks). Tag suggestions come from KNN over stored tag co-occurrences.</div>
+    </div>
+    <div class="card accent-sky">
+      <div class="card-title">recall(query, scope?, cwd?, limit?)</div>
+      <div class="card-body">Hybrid BM25+vector search over the scoped store. Returns memories ranked by RRF score with semantic similarity. Logging a recall bumps <code>access_count</code> — the spaced-repetition reinforcement signal.</div>
+    </div>
+    <div class="card accent-purple">
+      <div class="card-title">ask_memory(question, scope?)</div>
+      <div class="card-body">Ask a plain-language question; get a synthesized answer grounded in stored memories. Uses the configured consolidation LLM. Returns the answer plus source citations so the agent can link back to the originating memories.</div>
+    </div>
+    <div class="card accent-amber">
+      <div class="card-title">dream(scope?, cwd?)</div>
+      <div class="card-body">Run the full consolidation pipeline: encode → NREM → REM → decay → reconcile. Scoped to a project or all memories. Returns stats on merges, links, decays, and reconciliations. Safe to call after every working session.</div>
+    </div>
+    <div class="card accent-emerald">
+      <div class="card-title">update · forget · delete_memory · link · unlink</div>
+      <div class="card-body">Mutation tools. <code>update</code> patches any field on an existing memory. <code>forget</code> marks it expired (soft delete). <code>delete_memory</code> hard-deletes with all edges (permanent). <code>link</code>/<code>unlink</code> manage graph edges manually.</div>
+    </div>
+    <div class="card accent-indigo">
+      <div class="card-title">get_memory · list_memories · list_scopes · get_status · get_dream_log · record_use</div>
+      <div class="card-body">Read tools. <code>get_status</code> returns counts by state/type/scope plus embedding provider info. <code>get_dream_log</code> returns the last N consolidation runs. <code>record_use</code> logs that a recalled memory was actually used — training signal for a future reranker.</div>
+    </div>
+  </div>
+
+  <div style="margin-top:2rem" class="r">
+    <p style="font-size:.85rem;line-height:1.75;color:var(--text2)">
+      The server runs on <code>stdio</code> transport — Claude Code connects to it via the MCP config in <code>claude_desktop_config.json</code>. Every tool handler is hardened against crashes: uncaught exceptions and unhandled promise rejections are caught and logged to stderr (never stdout, which is the JSON-RPC channel), so a single bad call can't kill the server. Config is re-read from disk at the start of each dream with a 2-second TTL memoization — changes to <code>~/.mnemo/config.json</code> apply within seconds without restarting.
+    </p>
+  </div>
+</section>
+
+<!-- 07: CONFIG -->
+<section id="config">
+  <div class="eye r">08 — Configuration</div>
+  <h2 class="sec-h2 r" style="transition-delay:.05s">One file.<br><em>Everything configurable.</em></h2>
+  <p class="sec-lead r" style="transition-delay:.1s">
+    All configuration lives in <code>~/.mnemo/config.json</code>. Edits apply within 2 seconds without restarting
+    anything — the server uses TTL-memoized config reads. The Settings panel in the dashboard is a live UI
+    over the same file.
+  </p>
+
+  <div class="r" style="transition-delay:.15s">
+    <div class="codeblock">{
+  <span class="cs">"embeddings"</span>: {
+    <span class="cs">"provider"</span>: <span class="cs">"ollama"</span>,          <span class="cm">// none | local | astermind | ollama | openai</span>
+    <span class="cs">"model"</span>: <span class="cs">"nomic-embed-text"</span>    <span class="cm">// model name for ollama/openai</span>
+  },
+  <span class="cs">"consolidation"</span>: {
+    <span class="cs">"provider"</span>: <span class="cs">"ollama"</span>,          <span class="cm">// none | claude-cli | anthropic | openai | ollama</span>
+    <span class="cs">"model"</span>: <span class="cs">"llama3.2:3b"</span>,        <span class="cm">// LLM for NREM merge adjudication</span>
+    <span class="cs">"reconcileProvider"</span>: <span class="cs">"claude-cli"</span>, <span class="cm">// separate provider for contradiction/supersession</span>
+    <span class="cs">"reconcileModel"</span>: <span class="cs">"sonnet"</span>,      <span class="cm">// stronger model where nuance matters</span>
+    <span class="cs">"fallback"</span>: [{ <span class="cs">"provider"</span>: <span class="cs">"ollama"</span>, <span class="cs">"model"</span>: <span class="cs">"llama3.2:3b"</span> }] <span class="cm">// tried when primary fails; heuristic is the floor</span>
+  },
+  <span class="cs">"ml"</span>: {
+    <span class="cs">"typeSuggest"</span>: { <span class="cs">"enabled"</span>: <span class="ck">true</span> },  <span class="cm">// ELM type suggestion on remember()</span>
+    <span class="cs">"tagSuggest"</span>:  { <span class="cs">"enabled"</span>: <span class="ck">true</span> },  <span class="cm">// KNN tag suggestion on remember()</span>
+    <span class="cs">"prescreen"</span>:   { <span class="cs">"enabled"</span>: <span class="ck">true</span> },  <span class="cm">// ELM skips LLM calls for confident non-conflicts</span>
+    <span class="cs">"rerank"</span>:      { <span class="cs">"enabled"</span>: <span class="ck">true</span> }   <span class="cm">// learned reranker blends P(used) into recall</span>
+  },
+  <span class="cs">"decay"</span>: {
+    <span class="cs">"halfLifeDays"</span>: <span class="cn">30</span>,                <span class="cm">// base half-life for confidence</span>
+    <span class="cs">"dormantThreshold"</span>: <span class="cn">0.5</span>,          <span class="cm">// active → dormant below this</span>
+    <span class="cs">"protectImportance"</span>: <span class="cn">0.9</span>           <span class="cm">// memories above this never decay below active</span>
+  }
+}</div>
+  </div>
+
+  <div style="margin-top:2rem" class="r">
+    <div class="cards">
+      <div class="card accent-purple">
+        <div class="card-title">claude-cli provider</div>
+        <div class="card-body">Reuses your existing Claude Code login — no API key required. Runs <code>claude -p --model haiku</code> as a child process. Perfect for local use where you already have Claude Code installed. 60s timeout per call.</div>
+      </div>
+      <div class="card accent-sky">
+        <div class="card-title">ollama provider</div>
+        <div class="card-body">Talks to a local Ollama server at <code>http://localhost:11434/v1</code> via the OpenAI-compatible endpoint. Supports any chat model pulled via <code>ollama pull</code>. Cold-start note: first call after idle takes ~45s to load the model into memory; warm calls are under 1s.</div>
+      </div>
+      <div class="card accent-mint">
+        <div class="card-title">anthropic / openai providers</div>
+        <div class="card-body">Direct API calls with your key. <code>apiKey</code> can reference <code>${ANTHROPIC_API_KEY}</code> from env. The Settings UI in the dashboard hides/masks the key after save. Any OpenAI-compatible endpoint works (Gemini, Groq, LM Studio) by setting <code>baseUrl</code>.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CLOSING -->
+<div class="closing">
+  <h2 class="closing-h r">One SQLite file.<br><em>A complete memory system.</em></h2>
+  <p class="closing-p r" style="transition-delay:.1s">
+    Everything described here — the graph, the consolidation pipeline, the hybrid retrieval, the on-device ML —
+    runs from a single <code>~/.mnemo/memory.db</code> file. No server to host, no database to provision,
+    no infrastructure to maintain. Your AI tools just remember.
+  </p>
+  <div class="r" style="transition-delay:.2s;display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">
+    <a href="/" class="cta">← Dashboard</a>
+    <a href="/astermind-scroll.html" class="cta" style="color:var(--purple);border-color:rgba(139,92,246,.35);background:var(--purple2)">ML Deep Dive ↗</a>
+  </div>
+</div>
+
+<script>
+// Scroll reveal
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('vis'); obs.unobserve(e.target); } });
+}, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+document.querySelectorAll('.r').forEach(el => obs.observe(el));
+
+// Particle canvas
+const canvas = document.getElementById('particle-canvas');
+const ctx = canvas.getContext('2d');
+let W, H, particles = [];
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+
+function init() {
+  resize();
+  particles = Array.from({ length: 55 }, () => ({
+    x: Math.random() * W, y: Math.random() * H,
+    vx: (Math.random() - 0.5) * 0.22, vy: (Math.random() - 0.5) * 0.22,
+    r: Math.random() * 1.5 + 0.4,
+    a: Math.random() * 0.4 + 0.1,
+    c: Math.random() > 0.5 ? '79,255,176' : '139,92,246'
+  }));
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy;
+    if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
+    if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+    for (let j = i + 1; j < particles.length; j++) {
+      const q = particles[j];
+      const dx = q.x - p.x, dy = q.y - p.y, d = Math.sqrt(dx * dx + dy * dy);
+      if (d < 110) {
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y);
+        ctx.strokeStyle = `rgba(${p.c},${0.06 * (1 - d / 110)})`;
+        ctx.lineWidth = 0.6;
+        ctx.stroke();
+      }
+    }
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${p.c},${p.a})`;
+    ctx.fill();
+  }
+  requestAnimationFrame(draw);
+}
+
+window.addEventListener('resize', () => { resize(); });
+init(); draw();
+</script>
+</body>
+</html>
