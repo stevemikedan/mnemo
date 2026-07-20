@@ -3,7 +3,7 @@ import { writeFileSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import { MemoryStore, GraphStore, dream, searchHybrid, readConfig, reloadConfig, reindexEmbeddings, answerFromMemories, chatWithMemories, condenseQuery, expandConflicts, getMlStatus, evaluateRetrieval, edgeDegrees, rerankFeatures, listAudit, restoreMutation } from '@mnemo/core';
-import type { MemoryType, EdgeType, MemoryState, ChatMessage } from '@mnemo/core';
+import type { MemoryType, EdgeType, MemoryState, ChatMessage, EdgeDegree } from '@mnemo/core';
 
 /** Drop the vector BLOB before serializing a memory to the client. */
 function stripEmb(m: any): any {
@@ -34,7 +34,7 @@ export function recordCitationFeedback(
   answer: string | null,
   sources: { memory: any }[],
   retrieval?: Map<string, { bm25: number; cosine: number; score: number }>,
-  degrees?: Map<string, number>,
+  degrees?: Map<string, EdgeDegree>,
 ): void {
   if (!answer || !query.trim()) return;
   const cited = new Set<number>();
@@ -44,7 +44,7 @@ export function recordCitationFeedback(
   sources.forEach((src, i) => {
     const r = retrieval?.get(src.memory.id);
     const snapshot = retrieval ? {
-      features: rerankFeatures(src.memory, r?.bm25 ?? 0, r?.cosine ?? 0, nowMs, degrees?.get(src.memory.id) ?? 0),
+      features: rerankFeatures(src.memory, r?.bm25 ?? 0, r?.cosine ?? 0, nowMs, degrees?.get(src.memory.id)),
       rank: i + 1,
       fusedScore: r?.score,
     } : undefined;

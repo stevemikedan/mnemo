@@ -22,6 +22,7 @@ export { suggestTags } from './ml/tag-suggest.js';
 export { trainPrescreener, prescreenPair } from './ml/prescreen.js';
 export type { PrescreenPhase } from './ml/prescreen.js';
 export { trainReranker, applyReranker, rerankFeatures, edgeDegrees, RERANK_FEATURE_DIM } from './ml/reranker.js';
+export type { EdgeDegree } from './ml/reranker.js';
 export { evaluateRetrieval } from './ml/eval-retrieval.js';
 export type { RetrievalEvalReport, VariantMetrics } from './ml/eval-retrieval.js';
 export { getMlStatus } from './ml/status.js';

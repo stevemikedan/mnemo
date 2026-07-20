@@ -1,6 +1,6 @@
 import { BM25Index, type SearchResult } from './bm25.js';
 import { embedText, decodeVector, cosineSim } from './embedding.js';
-import { applyReranker, edgeDegrees } from '../ml/reranker.js';
+import { applyReranker, edgeDegrees, type EdgeDegree } from '../ml/reranker.js';
 import type { MemoryStore, QueryOptions } from '../graph/store.js';
 import type { GraphStore } from '../graph/graph.js';
 import type { Memory } from '../graph/schema.js';
@@ -147,7 +147,7 @@ export function fuseRRF(candidates: Memory[], bm25: SearchResult[], queryVec: nu
  * configured, else pure BM25. Used by the web dashboard, which manages its own
  * exact-scope candidate selection.
  */
-export async function searchHybrid(candidates: Memory[], query: string, limit: number, degrees?: Map<string, number>): Promise<SearchResult[]> {
+export async function searchHybrid(candidates: Memory[], query: string, limit: number, degrees?: Map<string, EdgeDegree>): Promise<SearchResult[]> {
   const index = new BM25Index();
   index.build(candidates);
   const bm25 = index.search(query, 50);

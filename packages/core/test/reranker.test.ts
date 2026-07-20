@@ -119,10 +119,10 @@ describe('decision-time feature snapshots', () => {
       const query = `snapshot query ${q}`;
       const jitter = q / 120; // vary rows slightly so the split isn't degenerate
       store.recordFeedback(query, `gone-pos-${q}`, true,
-        { features: [0.6, 0.5, 0.9, 0.1 + jitter, 0.1, 0.3, 1, 0.2], rank: 1, fusedScore: 0.04 });
+        { features: [0.6, 0.5, 0.9, 0.1 + jitter, 0.1, 0.3, 1, 0.2, 0, 1], rank: 1, fusedScore: 0.04 });
       for (let i = 0; i < 3; i++) {
         store.recordFeedback(query, `gone-neg-${q}-${i}`, false,
-          { features: [0.6, 0.5, 0.1, 0.1 + jitter, 0.1, 0.3, 1, 0.2], rank: i + 2, fusedScore: 0.02 });
+          { features: [0.6, 0.5, 0.1, 0.1 + jitter, 0.1, 0.3, 1, 0.2, 0, 1], rank: i + 2, fusedScore: 0.02 });
       }
     }
     expect(store.query({})).toHaveLength(0); // nothing to recompute from
@@ -140,5 +140,28 @@ describe('decision-time feature snapshots', () => {
     }
     const report = await trainReranker(store);
     expect(report.trained).toBe(true); // recompute path still produced a model
+  });
+});
+
+describe('edgeDegrees split', () => {
+  it('counts corroborating and disputing edges separately, direction-aware for supersedes', async () => {
+    const { GraphStore } = await import('../src/graph/graph.js');
+    const { edgeDegrees } = await import('../src/ml/reranker.js');
+    const store = new MemoryStore(':memory:');
+    const graph = new GraphStore(store.db);
+    const hub = store.create({ content: 'hub', scope: 'global' });
+    const rel = store.create({ content: 'related', scope: 'global' });
+    const con = store.create({ content: 'contradicting', scope: 'global' });
+    const stale = store.create({ content: 'stale, superseded by hub', scope: 'global' });
+
+    graph.addEdge(hub.id, rel.id, 'relates-to', 1);     // support for both ends
+    graph.addEdge(con.id, hub.id, 'contradicts', 1);    // conflict for both ends
+    graph.addEdge(hub.id, stale.id, 'supersedes', 1);   // support for hub (authority), conflict for stale
+
+    const deg = edgeDegrees(store);
+    expect(deg.get(hub.id)).toEqual({ support: 2, conflict: 1 });
+    expect(deg.get(rel.id)).toEqual({ support: 1, conflict: 0 });
+    expect(deg.get(con.id)).toEqual({ support: 0, conflict: 1 });
+    expect(deg.get(stale.id)).toEqual({ support: 0, conflict: 1 });
   });
 });

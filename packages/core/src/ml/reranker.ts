@@ -28,27 +28,44 @@ const TRAIN_POOL = 20;
 /** Cap on negatives kept per query — bounds class imbalance. */
 const NEG_PER_QUERY = 8;
 
-export const RERANK_FEATURE_DIM = 8;
+export const RERANK_FEATURE_DIM = 10;
 
 const DAY = 86_400_000;
 
-/** Total incident edges (in + out) per memory — a cheap graph-centrality signal
- * for the reranker. A well-connected hub is often more relevant than an orphan. */
-export function edgeDegrees(store: MemoryStore): Map<string, number> {
+/** A memory's incident edges, split by what they say about it. Eight
+ * relates-to edges and eight contradicts edges are opposite signals — a
+ * type-blind count would score them identically. */
+export interface EdgeDegree {
+  /** Corroborating connections: relates-to / derived-from / co-occurred (either
+   * direction), plus outgoing supersedes (this memory overrode another). */
+  support: number;
+  /** Disputed connections: contradicts (either direction), plus incoming
+   * supersedes (something overrode this memory). */
+  conflict: number;
+}
+
+/** Per-memory edge degrees split into support vs conflict — the reranker's
+ * graph-centrality signal. A well-connected hub is often more relevant than an
+ * orphan, but only when its connections corroborate rather than dispute it. */
+export function edgeDegrees(store: MemoryStore): Map<string, EdgeDegree> {
   const rows = store.db.prepare(
-    `SELECT memory_id, COUNT(*) AS n FROM (
-       SELECT from_id AS memory_id FROM memory_edges
+    `SELECT memory_id, SUM(conflict) AS conflict, SUM(1 - conflict) AS support FROM (
+       SELECT from_id AS memory_id,
+              CASE WHEN type = 'contradicts' THEN 1 ELSE 0 END AS conflict
+         FROM memory_edges
        UNION ALL
-       SELECT to_id AS memory_id FROM memory_edges
+       SELECT to_id AS memory_id,
+              CASE WHEN type IN ('contradicts', 'supersedes') THEN 1 ELSE 0 END AS conflict
+         FROM memory_edges
      ) GROUP BY memory_id`,
-  ).all() as { memory_id: string; n: number }[];
-  return new Map(rows.map(r => [r.memory_id, r.n]));
+  ).all() as { memory_id: string; conflict: number; support: number }[];
+  return new Map(rows.map(r => [r.memory_id, { support: r.support, conflict: r.conflict }]));
 }
 
 /** Feature vector for one (query, candidate) pair. `bm25`/`cosine` are the raw
- * per-query scores that fuseRRF already exposes on SearchResult; `degree` is the
- * memory's edge count (0 when the graph/degree map is unavailable). */
-export function rerankFeatures(m: Memory, bm25: number, cosine: number, nowMs: number, degree = 0): number[] {
+ * per-query scores that fuseRRF already exposes on SearchResult; `degree` is
+ * the memory's split edge count (absent when the degree map is unavailable). */
+export function rerankFeatures(m: Memory, bm25: number, cosine: number, nowMs: number, degree?: EdgeDegree): number[] {
   const created = Date.parse(m.created_at);
   const accessed = m.last_accessed ? Date.parse(m.last_accessed) : created;
   return [
@@ -59,7 +76,9 @@ export function rerankFeatures(m: Memory, bm25: number, cosine: number, nowMs: n
     Math.min(1, (nowMs - accessed) / DAY / 365),
     Math.min(1, Math.log1p(m.access_count) / 6),
     m.state === 'active' ? 1 : 0,
-    Math.min(1, degree / 10), // graph centrality — saturates at ~10 edges
+    Math.min(1, (degree?.support ?? 0) / 10), // saturates at ~10 corroborating edges
+    Math.min(1, (degree?.conflict ?? 0) / 5), // conflicts are rarer — saturate sooner
+    m.confidence, // reconcile lowers this on contradiction; 1.0 when unchallenged
   ];
 }
 
@@ -162,7 +181,7 @@ export async function trainReranker(store: MemoryStore): Promise<ValidationRepor
         : 0;
       const b = bm25Score.get(m.id) ?? 0;
       if (!positive && b === 0 && cos === 0 && !labeled) continue; // never retrieved — not a real negative
-      samples.push({ x: rerankFeatures(m, b, cos, nowMs, degrees.get(m.id) ?? 0), y: positive ? 'used' : 'skipped' });
+      samples.push({ x: rerankFeatures(m, b, cos, nowMs, degrees.get(m.id)), y: positive ? 'used' : 'skipped' });
       if (!positive) negatives++;
     }
   }
@@ -200,7 +219,7 @@ export interface Rankable {
  * `opts.force` bypasses the config gate (used by the eval harness to measure a
  * model before enabling it).
  */
-export function applyReranker<T extends Rankable>(results: T[], opts: { force?: boolean; degrees?: Map<string, number> } = {}): T[] {
+export function applyReranker<T extends Rankable>(results: T[], opts: { force?: boolean; degrees?: Map<string, EdgeDegree> } = {}): T[] {
   if (!opts.force && !readConfig().ml?.rerank?.enabled) return results;
   const clf = loadModel();
   if (!clf) return results;
@@ -209,7 +228,7 @@ export function applyReranker<T extends Rankable>(results: T[], opts: { force?: 
   const degrees = opts.degrees;
   return results
     .map(r => {
-      const x = rerankFeatures(r.memory, r.bm25 ?? 0, r.cosine ?? 0, nowMs, degrees?.get(r.memory.id) ?? 0);
+      const x = rerankFeatures(r.memory, r.bm25 ?? 0, r.cosine ?? 0, nowMs, degrees?.get(r.memory.id));
       const p = clf.predict(x);
       const pUsed = p ? p.proba.used ?? 0 : 0.5;
       return { ...r, score: r.score * (0.5 + pUsed) };

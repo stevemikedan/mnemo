@@ -196,7 +196,7 @@ describe('citation feedback decision-time snapshots', () => {
       [a.id, { bm25: 3, cosine: 0.7, score: 0.04 }],
       [b.id, { bm25: 1, cosine: 0.1, score: 0.02 }],
     ]);
-    const degrees = new Map([[a.id, 4]]);
+    const degrees = new Map([[a.id, { support: 4, conflict: 1 }]]);
     recordCitationFeedback(store, 'snapshot query?', 'Yes, per [1].',
       [{ memory: a }, { memory: b }], retrieval, degrees);
 
@@ -210,11 +210,13 @@ describe('citation feedback decision-time snapshots', () => {
     expect(rows[0].rank).toBe(1);
     expect(rows[0].fused_score).toBeCloseTo(0.04);
     const fa = JSON.parse(rows[0].features!);
-    expect(fa).toHaveLength(8);
+    expect(fa).toHaveLength(10);
     expect(fa[0]).toBeCloseTo(3 / 4);   // squashed bm25
     expect(fa[1]).toBeCloseTo(0.7);     // cosine
     expect(fa[2]).toBeCloseTo(0.8);     // importance at decision time
-    expect(fa[7]).toBeCloseTo(0.4);     // degree 4 / 10
+    expect(fa[7]).toBeCloseTo(0.4);     // support degree 4 / 10
+    expect(fa[8]).toBeCloseTo(0.2);     // conflict degree 1 / 5
+    expect(fa[9]).toBe(1);              // confidence — unchallenged default
 
     expect(rows[1].memory_id).toBe(b.id);
     expect(rows[1].used).toBe(0);       // impression, with its own snapshot
