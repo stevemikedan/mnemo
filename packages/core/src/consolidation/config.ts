@@ -9,6 +9,15 @@ export interface MnemoConfig {
     model?: string;
     apiKey?: string;
     baseUrl?: string;
+    /** Override provider/model specifically for the reconcile phase (contradiction/supersession).
+     * Falls back to provider/model when unset. Useful for routing nuanced reasoning to a
+     * stronger model (e.g. claude-cli/haiku) while keeping fast NREM dedup on a local model. */
+    reconcileProvider?: 'anthropic' | 'claude-cli' | 'openai' | 'ollama' | 'none';
+    reconcileModel?: string;
+    /** Ordered fallback chain tried when the primary (or reconcile) provider returns null —
+     * lets you run an aggressive primary safely: strong model up front, local model as a net,
+     * heuristic as the final floor. Empty/unset = no chain (single-provider behavior). */
+    fallback?: { provider: 'anthropic' | 'claude-cli' | 'openai' | 'ollama'; model?: string }[];
   };
   embeddings?: {
     /** 'none' (default), 'local' (built-in hashing), 'astermind' (on-device TF-IDF), 'openai', or 'ollama'. */
@@ -26,8 +35,12 @@ export interface MnemoConfig {
     tagSuggest?: { enabled?: boolean; minSim?: number; voteThreshold?: number; maxTags?: number };
     /** Write-time near-duplicate warning. On by default (warn-only, never blocks). */
     dedup?: { enabled?: boolean; overlapThreshold?: number; cosineThreshold?: number };
-    /** Consolidation pre-screener (logging now; gating later). Off by default. */
-    prescreen?: { enabled?: boolean; logging?: boolean };
+    /** Consolidation pre-screener. `logging` (default on) captures LLM verdicts as
+     * training data; `enabled` lets the trained ELM skip LLM calls for confident
+     * negatives. `excludeModels` drops named adjudicators' rows from training. */
+    prescreen?: { enabled?: boolean; logging?: boolean; minMargin?: number; excludeModels?: string[] };
+    /** Learned recall reranker trained on recall_feedback. Off by default. */
+    rerank?: { enabled?: boolean };
   };
   decay?: {
     /** Master switch for the decay/lifecycle pass. Default true. */

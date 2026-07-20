@@ -1,17 +1,19 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { MemoryStore } from '../graph/store.js';
 import type { GraphStore } from '../graph/graph.js';
-import { extractSignals } from './session.js';
+import { extractSignals, distillSignals } from './session.js';
 import { runNREM, defaultMerge } from './nrem.js';
 import { runREM } from './rem.js';
 import { runDecay } from './decay.js';
 import { runReconcile, llmAdjudicate } from './reconcile.js';
-import { describeConsolidationModel } from './llm.js';
+import { lastModelUsed, resetLlmTelemetry, getLlmTelemetry } from './llm.js';
 import { encodeForDream } from '../rag/embedding.js';
 import { readConfig } from './config.js';
 import { trainTypeClassifier } from '../ml/type-classifier.js';
 import { pairFeatures } from '../ml/featurize.js';
 import { logAdjudication } from '../ml/adjudication-log.js';
+import { trainPrescreener, prescreenPair } from '../ml/prescreen.js';
+import { trainReranker } from '../ml/reranker.js';
 
 /** Is a consolidation LLM actually adjudicating (so its verdicts are worth logging)? */
 function consolidationLlmActive(): boolean {
@@ -75,15 +77,40 @@ export async function dream(store: MemoryStore, graph: GraphStore, opts: DreamOp
   // beats the naive baseline on held-out data. Off unless ml.typeSuggest.enabled.
   const typeReport = readConfig().ml?.typeSuggest?.enabled ? trainTypeClassifier(store) : undefined;
 
-  // Resolve once per dream — the same stamp goes on every verdict this pass.
-  const adjudicatorModel = describeConsolidationModel();
+  // ML: (re)train the consolidation pre-screeners on past LLM verdicts and the
+  // recall reranker on recall_feedback. Closed-form training is cheap; each
+  // model persists only when it beats its baseline on held-out data, so an
+  // undertrained model can never gate an LLM call or reorder recall.
+  const prescreenReports = readConfig().ml?.prescreen?.enabled
+    ? { nrem: trainPrescreener(store, 'nrem'), reconcile: trainPrescreener(store, 'reconcile') }
+    : undefined;
+  const rerankReport = readConfig().ml?.rerank?.enabled ? await trainReranker(store) : undefined;
+
+  // Reset LLM telemetry so this dream's fallback counts / per-model tallies are
+  // isolated. Provenance is now read per verdict (lastModelUsed) rather than
+  // stamped from the configured primary — so when the fallback chain swaps in a
+  // different model, the adjudication_log records the model that ACTUALLY ran
+  // (which excludeModels-based training filtering depends on).
+  resetLlmTelemetry();
 
   // NREM with a logging wrapper — captures each MERGE/SKIP verdict + features as
-  // pre-screener training data (only when an LLM is really adjudicating).
+  // pre-screener training data (only when an LLM is really adjudicating). When
+  // the trained pre-screener confidently predicts SKIP, the LLM call is skipped
+  // entirely (elm-sourced rows are logged for observability, never trained on).
+  let prescreenSkippedNrem = 0;
   const nrem = await runNREM(store, graph, memories, async (survivor, candidate) => {
+    const screened = prescreenPair('nrem', survivor, candidate);
+    if (screened === 'SKIP') {
+      prescreenSkippedNrem++;
+      logAdjudication(store, { older_id: survivor.id, newer_id: candidate.id, scope: survivor.scope, phase: 'nrem', features: pairFeatures(survivor, candidate), verdict: screened, source: 'elm' });
+      return 'SKIP';
+    }
     const verdict = await defaultMerge(survivor, candidate);
+    const model = lastModelUsed();
     if (shouldLogAdjudications()) {
-      logAdjudication(store, { older_id: survivor.id, newer_id: candidate.id, scope: survivor.scope, phase: 'nrem', features: pairFeatures(survivor, candidate), verdict, source: 'llm', model: adjudicatorModel });
+      // 'heuristic' means the whole chain failed and NREM's word-overlap fallback
+      // decided — record that honestly so it's excluded from LLM-label training.
+      logAdjudication(store, { older_id: survivor.id, newer_id: candidate.id, scope: survivor.scope, phase: 'nrem', features: pairFeatures(survivor, candidate), verdict, source: model === 'heuristic' ? 'heuristic' : 'llm', model });
     }
     return verdict;
   });
@@ -99,15 +126,24 @@ export async function dream(store: MemoryStore, graph: GraphStore, opts: DreamOp
   if (opts.scope && opts.scope !== 'global') {
     reconcileSet = reconcileSet.filter(m => m.scope === opts.scope || m.scope === 'global');
   }
+  let prescreenSkippedReconcile = 0;
   const reconcile = await runReconcile(store, graph, reconcileSet, async (older, newer) => {
+    const screened = prescreenPair('reconcile', older, newer);
+    if (screened === 'NONE') {
+      prescreenSkippedReconcile++;
+      logAdjudication(store, { older_id: older.id, newer_id: newer.id, scope: older.scope, phase: 'reconcile', features: pairFeatures(older, newer), verdict: screened, source: 'elm' });
+      return 'NONE';
+    }
     const verdict = await llmAdjudicate(older, newer);
+    const model = lastModelUsed();
     if (shouldLogAdjudications()) {
-      logAdjudication(store, { older_id: older.id, newer_id: newer.id, scope: older.scope, phase: 'reconcile', features: pairFeatures(older, newer), verdict, source: 'llm', model: adjudicatorModel });
+      logAdjudication(store, { older_id: older.id, newer_id: newer.id, scope: older.scope, phase: 'reconcile', features: pairFeatures(older, newer), verdict, source: model === 'heuristic' ? 'heuristic' : 'llm', model });
     }
     return verdict;
   });
 
   const duration_ms = Date.now() - startMs;
+  const llmTelemetry = getLlmTelemetry();
 
   // Write to consolidation_log
   store.db.prepare(`
@@ -121,6 +157,15 @@ export async function dream(store: MemoryStore, graph: GraphStore, opts: DreamOp
     JSON.stringify({
       ...nrem, ...rem, ...decay, ...reconcile,
       ...(typeReport ? { type_model_trained: typeReport.trained ? 1 : 0, type_model_accuracy: Math.round((typeReport.accuracy ?? 0) * 100) / 100 } : {}),
+      ...(prescreenReports ? {
+        prescreen_nrem_trained: prescreenReports.nrem.trained ? 1 : 0,
+        prescreen_reconcile_trained: prescreenReports.reconcile.trained ? 1 : 0,
+        prescreen_skipped_llm_calls: prescreenSkippedNrem + prescreenSkippedReconcile,
+      } : {}),
+      ...(rerankReport ? { rerank_model_trained: rerankReport.trained ? 1 : 0, rerank_model_accuracy: Math.round((rerankReport.accuracy ?? 0) * 100) / 100 } : {}),
+      // LLM fallback visibility: how many adjudications fell through to a
+      // non-primary provider this dream. 0 (or absent) means the primary held.
+      ...(llmTelemetry.fallbacks > 0 ? { llm_fallback_calls: llmTelemetry.fallbacks } : {}),
       duration_ms,
     }),
   );
@@ -148,7 +193,9 @@ export async function consolidateSession(
   sessionId: string,
   projectPath?: string,
 ): Promise<ConsolidateSessionResult> {
-  const signals = extractSignals(transcript);
+  // Prefer LLM distillation (self-contained, boilerplate-free facts); fall back
+  // to regex extraction when no consolidation LLM is configured or it fails.
+  const signals = (await distillSignals(transcript)) ?? extractSignals(transcript);
   if (signals.length === 0) return { extracted: 0, merged: 0, saved: 0 };
 
   const scope = projectPath ? `project:${projectPath}` : 'global';
@@ -172,6 +219,26 @@ export async function consolidateSession(
   const existing = store.query({ cwd: projectPath ?? 'global', states: ['active', 'dormant'] });
   const newMems = saved.map(id => store.get(id)).filter((m): m is NonNullable<typeof m> => m !== null);
   const nrem = await runNREM(store, graph, [...existing.filter(m => !saved.includes(m.id)), ...newMems]);
+
+  // Memories extracted from the same session literally co-occurred — record that
+  // as graph edges (among the survivors NREM didn't merge away) so recall's
+  // neighbor expansion can surface session-mates. Direct SQL read avoids the
+  // access_count bump that store.get() would cause. Capped to bound the O(n²)
+  // pairwise fan-out on a large extraction.
+  const CO_OCCUR_CAP = 8;
+  if (saved.length > 1) {
+    const ph = saved.map(() => '?').join(',');
+    const survivors = (store.db.prepare(
+      `SELECT id FROM memories WHERE id IN (${ph}) AND state != 'expired'`,
+    ).all(...saved) as { id: string }[]).map(r => r.id);
+    if (survivors.length > 1 && survivors.length <= CO_OCCUR_CAP) {
+      for (let i = 0; i < survivors.length; i++) {
+        for (let j = i + 1; j < survivors.length; j++) {
+          graph.addEdge(survivors[i], survivors[j], 'co-occurred', 0.5);
+        }
+      }
+    }
+  }
 
   return {
     extracted: signals.length,

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MemoryStore } from '../src/graph/store.js';
 import { GraphStore } from '../src/graph/graph.js';
-import { RecallEngine, fuseRRF } from '../src/rag/recall.js';
+import { RecallEngine, fuseRRF, searchHybrid } from '../src/rag/recall.js';
 import { BM25Index } from '../src/rag/bm25.js';
 import { encodeVector } from '../src/rag/embedding.js';
 import { __setConfig } from '../src/consolidation/config.js';
@@ -67,6 +67,33 @@ describe('RecallEngine.recall — scoping', () => {
     const hits = await recall.recall({ query: 'docker', scope: 'project:/a', includeRelated: true });
     const related = hits.flatMap(h => h.related ?? []);
     expect(related.some(r => r.scope === 'project:/b')).toBe(false);
+  });
+});
+
+describe('superseded facts stay out of grounding', () => {
+  it('recall excludes superseded memories by default, includes them on request', async () => {
+    const { store, recall } = engine();
+    const stale = store.create({ content: 'deploys via jenkins pipeline', scope: 'global' });
+    const fresh = store.create({ content: 'deploys via github actions', scope: 'global' });
+    // What reconcile does on a SUPERSEDES verdict:
+    store.update(stale.id, { importance: 0.15, superseded_by: fresh.id });
+
+    const hits = await recall.recall({ query: 'deploys', scope: 'global' });
+    expect(hits.map(h => h.memory.id)).toEqual([fresh.id]);
+
+    const all = await recall.recall({ query: 'deploys', scope: 'global', includeSuperseded: true });
+    expect(all.map(h => h.memory.id)).toContain(stale.id);
+  });
+
+  it('searchHybrid importance boost sinks a demoted memory below the current fact', async () => {
+    // The web chat path: candidates are caller-supplied, so the boost (not a
+    // filter) is what makes reconcile's demotion effective here.
+    const store = new MemoryStore(':memory:');
+    const stale = store.create({ content: 'project deploys via jenkins pipeline', scope: 'global', importance: 0.15 });
+    const fresh = store.create({ content: 'project deploys via github actions now', scope: 'global', importance: 0.7 });
+    const hits = await searchHybrid(store.query({}), 'project deploys', 2);
+    expect(hits[0].memory.id).toBe(fresh.id);
+    expect(hits[1].memory.id).toBe(stale.id);
   });
 });
 

@@ -1,5 +1,6 @@
 import { BM25Index, type SearchResult } from './bm25.js';
 import { embedText, decodeVector, cosineSim } from './embedding.js';
+import { applyReranker, edgeDegrees } from '../ml/reranker.js';
 import type { MemoryStore, QueryOptions } from '../graph/store.js';
 import type { GraphStore } from '../graph/graph.js';
 import type { Memory } from '../graph/schema.js';
@@ -12,6 +13,8 @@ export interface RecallOptions extends QueryOptions {
   includeRelated?: boolean;
   /** Drop candidates below this importance before ranking. */
   minImportance?: number;
+  /** Include memories reconcile marked outdated (metadata.superseded_by). Default false. */
+  includeSuperseded?: boolean;
 }
 
 export interface RecallResult {
@@ -38,6 +41,12 @@ export class RecallEngine {
     if (opts.minImportance != null) {
       candidates = candidates.filter(c => c.importance >= opts.minImportance!);
     }
+    if (!opts.includeSuperseded) {
+      // Reconcile demotes superseded facts to importance 0.15 so they *sink*,
+      // but in a small candidate set they can still surface — and an agent
+      // asking "how do we deploy?" must never get the fact we know is stale.
+      candidates = candidates.filter(c => !c.superseded_by);
+    }
 
     // Rebuild the index on every recall. Keying on candidate count (the prior
     // approach) reused a stale index whenever a different scope or an edit
@@ -52,7 +61,10 @@ export class RecallEngine {
       // Hybrid: fuse lexical (BM25) with semantic (vector cosine) rankings when
       // an embedding provider is configured; otherwise this is pure BM25.
       const queryVec = (await embedText([opts.query]))?.[0] ?? null;
-      results = queryVec ? fuseRRF(candidates, bm25, queryVec) : bm25;
+      // Learned rerank (no-op unless ml.rerank.enabled and a validated model
+      // exists): blends P(used) — trained on recall_feedback — into the score,
+      // with graph centrality (edge degree) as one of its features.
+      results = applyReranker(queryVec ? fuseRRF(candidates, bm25, queryVec) : bm25, { degrees: edgeDegrees(this.store) });
     } else {
       // No query — return by importance
       results = candidates
@@ -79,16 +91,17 @@ export class RecallEngine {
     // Graph expand: include 1-hop neighbors for top results, but only ones
     // within the visible scope. A stray cross-scope edge (e.g. from a past
     // global dream) must not bleed another project's memory into these results.
-    const visibleIds = new Set(candidates.map(c => c.id));
-    return Promise.all(top.map(async r => {
-      const neighbors = this.graph.getNeighbors(r.memory.id, 1);
-      const related = neighbors
-        .filter(n => visibleIds.has(n.id))
-        .map(n => this.store.get(n.id))
+    // Resolve neighbors from the candidate set we already loaded — using
+    // store.get() here would bump their access_count, silently reinforcing a
+    // memory against decay merely for being adjacent to a hit.
+    const byId = new Map(candidates.map(c => [c.id, c]));
+    return top.map(r => {
+      const related = this.graph.getNeighbors(r.memory.id, 1)
+        .map(n => byId.get(n.id))
         .filter((m): m is Memory => m != null)
         .slice(0, 3);
       return { memory: r.memory, score: r.score, related };
-    }));
+    });
   }
 }
 
@@ -134,11 +147,17 @@ export function fuseRRF(candidates: Memory[], bm25: SearchResult[], queryVec: nu
  * configured, else pure BM25. Used by the web dashboard, which manages its own
  * exact-scope candidate selection.
  */
-export async function searchHybrid(candidates: Memory[], query: string, limit: number): Promise<SearchResult[]> {
+export async function searchHybrid(candidates: Memory[], query: string, limit: number, degrees?: Map<string, number>): Promise<SearchResult[]> {
   const index = new BM25Index();
   index.build(candidates);
   const bm25 = index.search(query, 50);
   const queryVec = (await embedText([query]))?.[0] ?? null;
-  const ranked = queryVec ? fuseRRF(candidates, bm25, queryVec) : bm25;
-  return ranked.slice(0, limit);
+  const ranked = applyReranker(queryVec ? fuseRRF(candidates, bm25, queryVec) : bm25, { degrees });
+  // Importance boost, same shape as RecallEngine.recall — without it,
+  // reconcile's demotion of superseded facts (importance → 0.15) had no effect
+  // on this path, so chat could ground answers in known-stale memories.
+  return ranked
+    .map(r => ({ ...r, score: r.score * (0.5 + r.memory.importance * 0.5) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
 }

@@ -42,24 +42,23 @@ describe('adjudication logging', () => {
     expect(rows(store)).toHaveLength(0);
   });
 
-  it('dream logs verdicts when a consolidation LLM is configured', async () => {
-    // Force an "LLM active" config, but stub the actual call by using the heuristic
-    // path via 'none' would skip logging — so we assert the gate directly instead:
-    // with a provider set, shouldLogAdjudications() is true and reconcile/nrem
-    // wrappers log. We use a provider value that llmComplete treats as no-op
-    // (returns null → verdict NONE/heuristic), but logging still fires.
+  it('dream logs verdicts with HONEST provenance when the configured LLM cannot run', async () => {
+    // Provider is set (so the logging gate is open) but the API key is empty, so
+    // the anthropic call returns null and NREM's word-overlap heuristic actually
+    // decides. The row must record that truthfully — source/model 'heuristic',
+    // NOT the configured anthropic model — so the pre-screener never trains on a
+    // heuristic verdict mislabeled as an LLM one.
     __setConfig({ consolidation: { provider: 'anthropic', apiKey: '' }, ml: { prescreen: { logging: true } } });
     const { store, graph } = setup();
     store.create({ content: 'the deployment uses docker compose for local postgres', scope: 'global' });
     store.create({ content: 'the deployment uses docker compose to run postgres locally', scope: 'global' });
     await dream(store, graph, {});
-    // At least the NREM adjudication of the near-duplicate pair should be logged.
     const r = rows(store);
     expect(r.length).toBeGreaterThanOrEqual(1);
     expect(['nrem', 'reconcile']).toContain(r[0].phase);
     expect(JSON.parse(r[0].features).length).toBe(8);
-    // Every verdict carries the resolved provider/model stamp for label filtering.
-    expect(r[0].model).toBe('anthropic/claude-haiku-4-5-20251001');
+    expect(r[0].model).toBe('heuristic');
+    expect(r[0].source).toBe('heuristic');
   });
 
   it('logAdjudication stores an explicit model stamp', () => {
