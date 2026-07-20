@@ -1,8 +1,38 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import Database from 'better-sqlite3';
+import { mkdtempSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { MemoryStore } from '../src/graph/store.js';
 import { __setConfig } from '../src/consolidation/config.js';
 
 beforeEach(() => __setConfig({}));
+
+describe('superseded_by migration', () => {
+  it('backfills the column from legacy metadata and strips the duplicate pointer', () => {
+    const dbPath = join(mkdtempSync(join(tmpdir(), 'mnemo-sup-')), 'test.db');
+    // Simulate a pre-column DB: memories table without superseded_by, pointer in metadata.
+    const old = new Database(dbPath);
+    old.exec(`CREATE TABLE memories (
+      id TEXT PRIMARY KEY, content TEXT NOT NULL, type TEXT NOT NULL DEFAULT 'project',
+      scope TEXT NOT NULL DEFAULT 'global', state TEXT NOT NULL DEFAULT 'active',
+      importance REAL NOT NULL DEFAULT 0.5, confidence REAL NOT NULL DEFAULT 1.0,
+      access_count INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL,
+      last_accessed TEXT, last_consolidated TEXT, embedding BLOB,
+      tags TEXT NOT NULL DEFAULT '[]', source TEXT NOT NULL DEFAULT 'user',
+      metadata TEXT NOT NULL DEFAULT '{}'
+    )`);
+    old.prepare(`INSERT INTO memories (id, content, created_at, metadata) VALUES ('old','stale fact','2026-01-01T00:00:00Z',?)`)
+      .run(JSON.stringify({ superseded_by: 'newer', other: 'keep' }));
+    old.close();
+
+    const store = new MemoryStore(dbPath); // constructor runs the migration
+    const m = store.get('old')!;
+    expect(m.superseded_by).toBe('newer');          // promoted to the column
+    expect(m.metadata['superseded_by']).toBeUndefined(); // stripped from metadata
+    expect(m.metadata['other']).toBe('keep');       // other metadata preserved
+  });
+});
 
 describe('MemoryStore.create', () => {
   it('applies sane defaults', () => {

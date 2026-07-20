@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { MemoryStore } from '@mnemo/core';
 import type { GraphStore } from '@mnemo/core';
-import { dream, consolidateSession, getDreamLog, reindexEmbeddings, reloadConfig } from '@mnemo/core';
+import { dream, consolidateSession, getDreamLog, reindexEmbeddings, reloadConfig, listAudit } from '@mnemo/core';
 
 export function registerDreamTools(server: McpServer, store: MemoryStore, graph: GraphStore): void {
   server.registerTool('dream', {
@@ -81,6 +81,21 @@ export function registerDreamTools(server: McpServer, store: MemoryStore, graph:
       const stats = Object.entries(e.stats).map(([k, v]) => `${k}: ${v}`).join(', ');
       return `**${e.started_at}** | scope: ${e.scope} | phase: ${e.phase}\n  ${stats}`;
     });
+    return { content: [{ type: 'text' as const, text: lines.join('\n\n') }] };
+  });
+
+  server.registerTool('list_consolidation_audit', {
+    description: 'List recent reversible consolidation mutations (NREM merges, reconcile supersessions) with their mutation_id. Pass a mutation_id to undo_consolidation to restore the original memories.',
+    inputSchema: z.object({
+      limit: z.number().int().min(1).max(50).optional().default(20),
+    }),
+  }, async ({ limit }) => {
+    const mutations = listAudit(store, { limit });
+    if (mutations.length === 0) {
+      return { content: [{ type: 'text' as const, text: 'No reversible consolidation mutations. (They accrue as `dream` merges or supersedes memories.)' }] };
+    }
+    const lines = mutations.map(m =>
+      `**${m.mutationId}** | ${m.phase} | ${m.createdAt}\n  ${m.description}`);
     return { content: [{ type: 'text' as const, text: lines.join('\n\n') }] };
   });
 }

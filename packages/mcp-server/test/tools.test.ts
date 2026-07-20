@@ -47,8 +47,8 @@ describe('MCP tool surface', () => {
     const names = tools.map(t => t.name).sort();
     expect(names).toEqual([
       'ask_memory', 'consolidate_session', 'delete_memory', 'dream', 'forget', 'get_dream_log',
-      'get_memory', 'get_status', 'link', 'list_memories', 'list_scopes',
-      'recall', 'record_use', 'reindex_embeddings', 'remember', 'unlink', 'update',
+      'get_memory', 'get_status', 'link', 'list_consolidation_audit', 'list_memories', 'list_scopes',
+      'recall', 'record_use', 'reindex_embeddings', 'remember', 'undo_consolidation', 'unlink', 'update',
     ]);
   });
 });

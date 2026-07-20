@@ -14,7 +14,10 @@ export const SCHEMA_SQL = `
     embedding     BLOB,
     tags          TEXT NOT NULL DEFAULT '[]',
     source        TEXT NOT NULL DEFAULT 'user',
-    metadata      TEXT NOT NULL DEFAULT '{}'
+    metadata      TEXT NOT NULL DEFAULT '{}',
+    -- Points at the memory that supersedes this one (reconcile). First-class +
+    -- indexed so retrieval can exclude stale facts without scanning metadata JSON.
+    superseded_by TEXT
   );
 
   CREATE TABLE IF NOT EXISTS memory_edges (
@@ -48,6 +51,19 @@ export const SCHEMA_SQL = `
     source     TEXT NOT NULL,   -- 'llm' | 'elm' | 'heuristic'
     model      TEXT,            -- provider/model that rendered the verdict, e.g. 'ollama/llama3.2:3b' — lets training filter by label quality
     created_at TEXT NOT NULL
+  );
+
+  -- Before-state snapshots of destructive dream mutations (NREM merges,
+  -- reconcile supersessions), so a bad LLM verdict is recoverable by hand.
+  CREATE TABLE IF NOT EXISTS dream_audit (
+    id           TEXT PRIMARY KEY,
+    mutation_id  TEXT,            -- groups the rows of one mutation (an NREM merge audits both memories)
+    phase        TEXT NOT NULL,   -- 'nrem-merge' | 'reconcile-supersede'
+    memory_id    TEXT NOT NULL,
+    before_state TEXT NOT NULL,   -- JSON snapshot (embedding omitted)
+    note         TEXT,
+    restored_at  TEXT,            -- set when this mutation has been reversed (null = still reversible)
+    created_at   TEXT NOT NULL
   );
 
   -- Implicit feedback for a future recall reranker (see record_use).
@@ -87,6 +103,9 @@ export interface Memory {
   tags: string[];
   source: string;
   metadata: Record<string, unknown>;
+  /** ID of the memory that supersedes this one, or null. Set by reconcile;
+   * memories with this set are excluded from recall/chat grounding by default. */
+  superseded_by: string | null;
 }
 
 export interface MemoryEdge {

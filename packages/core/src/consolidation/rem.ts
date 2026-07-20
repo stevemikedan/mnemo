@@ -1,3 +1,4 @@
+import { cosineSim as vecCosine, decodeVector } from '../rag/embedding.js';
 import type { MemoryStore } from '../graph/store.js';
 import type { GraphStore } from '../graph/graph.js';
 import type { Memory } from '../graph/schema.js';
@@ -53,6 +54,23 @@ export function runREM(
       const pairKey = [a.id, b.id].sort().join(':');
       if (existingEdgePairs.has(pairKey)) continue;
 
+      // Prefer stored embedding vectors (written by encodeForDream, which runs
+      // before REM in a dream) — they catch paraphrase relations that share no
+      // vocabulary. The "related, not duplicate" band is higher for transformer
+      // embeddings, whose cosines sit well above lexical ones. Pairs without
+      // vectors (or with dimension-mismatched ones, cosine 0) fall back to the
+      // original lexical band.
+      const aVec = a.embedding != null ? decodeVector(a.embedding as Buffer) : null;
+      const bVec = b.embedding != null ? decodeVector(b.embedding as Buffer) : null;
+      const semSim = aVec && bVec ? vecCosine(aVec, bVec) : 0;
+      if (semSim > 0) {
+        if (semSim >= 0.55 && semSim < 0.85) {
+          graph.addEdge(a.id, b.id, 'relates-to', semSim);
+          existingEdgePairs.add(pairKey);
+          stats.linked++;
+        }
+        continue;
+      }
       const sim = cosineSim(a.content, b.content);
       // Related (0.25–0.65): not duplicates, not unrelated
       if (sim >= 0.25 && sim < 0.65) {

@@ -35,7 +35,7 @@ describe('runReconcile', () => {
 
     const got = store.get(older.id)!;
     expect(got.importance).toBeLessThanOrEqual(0.15);
-    expect(got.metadata.superseded_by).toBe(newer.id);
+    expect(got.superseded_by).toBe(newer.id);
   });
 
   it('flags contradictions with an edge but does not demote either memory', async () => {
@@ -74,5 +74,25 @@ describe('runReconcile', () => {
     store.create({ content: 'the project uses pnpm as its package manager', type: 'user' });
     const stats = await runReconcile(store, graph, store.query({}), always('SUPERSEDES'));
     expect(stats.checked).toBe(0);
+  });
+
+  it('admits a paraphrase pair via embedding cosine when lexical overlap misses it', async () => {
+    const { store, graph } = setup();
+    // Zero shared ≥4-letter words → lexical overlap 0, below MIN_OVERLAP.
+    const a = store.create({ content: 'ships releases with docker' });
+    const b = store.create({ content: 'we deploy using containers now' });
+    expect((await runReconcile(store, graph, store.query({}), always('CONTRADICTS'))).checked).toBe(0);
+
+    // Near-identical stored vectors → cosine ≈ 1 clears the semantic gate.
+    const enc = (v: number[]) => {
+      const buf = Buffer.alloc(v.length * 4);
+      v.forEach((x, i) => buf.writeFloatLE(x, i * 4));
+      return buf;
+    };
+    store.setEmbedding(a.id, enc([0.9, 0.1, 0]));
+    store.setEmbedding(b.id, enc([0.88, 0.12, 0]));
+    const stats = await runReconcile(store, graph, store.query({}), always('CONTRADICTS'));
+    expect(stats.checked).toBe(1);
+    expect(stats.contradictions).toBe(1);
   });
 });

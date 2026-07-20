@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { readConfig, suggestType, suggestTags, findNearDuplicates } from '@mnemo/core';
+import { readConfig, suggestType, suggestTags, findNearDuplicates, restoreMutation } from '@mnemo/core';
 import type { MemoryStore } from '@mnemo/core';
 import type { GraphStore } from '@mnemo/core';
 import type { MemoryType, EdgeType } from '@mnemo/core';
@@ -147,6 +147,20 @@ export function registerWriteTools(server: McpServer, store: MemoryStore, graph:
     store.recordFeedback(query, memory_id);
     return {
       content: [{ type: 'text' as const, text: `Recorded use of ${memory_id}.` }],
+    };
+  });
+
+  server.registerTool('undo_consolidation', {
+    description: 'Reverse a destructive consolidation (an NREM merge or a reconcile supersession) by its mutation_id, restoring the affected memories from their pre-mutation snapshots. Use list_consolidation_audit to find reversible mutations.',
+    inputSchema: z.object({
+      mutation_id: z.string().describe('The mutation_id from list_consolidation_audit'),
+    }),
+  }, async ({ mutation_id }) => {
+    const result = restoreMutation(store, graph, mutation_id);
+    return {
+      content: [{ type: 'text' as const, text: result.restored
+        ? `Reversed consolidation ${mutation_id}: restored ${result.memoryIds.length} memory(ies).`
+        : `Nothing to restore for ${mutation_id} (${result.reason}).` }],
     };
   });
 

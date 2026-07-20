@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import { llmComplete } from './llm.js';
 import { BM25Index } from '../rag/bm25.js';
 import type { MemoryStore } from '../graph/store.js';
@@ -69,14 +70,23 @@ export async function runNREM(
     for (const candidate of candidates.slice(0, 2)) {
       const action = await adjudicate(mem, candidate.memory);
       if (action === 'MERGE') {
-        // mem survives (higher importance), candidate is expired
+        // mem survives (higher importance), candidate is expired. Both snapshots
+        // share one mutation_id so recovery can reverse the merge as a unit.
+        const mutationId = uuidv4();
+        store.auditMutation('nrem-merge', mem, `absorbed ${candidate.memory.id}`, mutationId);
+        store.auditMutation('nrem-merge', candidate.memory, `expired into ${mem.id}`, mutationId);
         const combined = `${mem.content}\n  [Also: ${candidate.memory.content}]`;
         store.update(mem.id, {
           content: combined,
           importance: Math.max(mem.importance, candidate.memory.importance),
         });
         store.update(candidate.memory.id, { state: 'expired' });
-        graph.addEdge(candidate.memory.id, mem.id, 'supersedes');
+        // The survivor's content now incorporates the absorbed memory — that's a
+        // derivation, not a supersession (the absorbed fact wasn't outdated, just
+        // folded in). Edge is product→source (survivor derived-from absorbed),
+        // matching the link tool's derived-from direction and keeping 'supersedes'
+        // reserved for reconcile's consistent newer→older meaning.
+        graph.addEdge(mem.id, candidate.memory.id, 'derived-from');
         expired.add(candidate.memory.id);
         stats.merged++;
         merged = true;

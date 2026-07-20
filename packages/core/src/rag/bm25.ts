@@ -44,7 +44,7 @@ export class BM25Index {
       const results = this.index.search(sanitized);
       return results
         .slice(0, limit)
-        .map(r => ({ memory: this.memoryMap.get(r.ref)!, score: r.score }))
+        .map(r => ({ memory: this.memoryMap.get(r.ref)!, score: r.score, bm25: r.score }))
         .filter(r => r.memory != null);
     } catch {
       // lunr throws on empty/invalid queries

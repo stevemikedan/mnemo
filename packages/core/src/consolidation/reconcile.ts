@@ -1,4 +1,5 @@
-import { llmComplete } from './llm.js';
+import { llmReconcileComplete } from './llm.js';
+import { cosineSim, decodeVector } from '../rag/embedding.js';
 import type { MemoryStore } from '../graph/store.js';
 import type { GraphStore } from '../graph/graph.js';
 import type { Memory } from '../graph/schema.js';
@@ -22,6 +23,13 @@ const MAX_PAIRS = 24;
  * classic contradiction) are worth adjudicating.
  */
 const MIN_OVERLAP = 0.2;
+/**
+ * Minimum stored-embedding cosine to admit a pair that lexical overlap missed —
+ * catches paraphrase conflicts sharing little vocabulary ("deploys via GitHub
+ * Actions" vs "CI runs on Jenkins now"). Calibrated for transformer embeddings
+ * (nomic), whose same-subject cosines sit well above lexical-overlap scores.
+ */
+const MIN_SEMANTIC = 0.6;
 
 function wordOverlap(a: string, b: string): number {
   const A = new Set(a.toLowerCase().match(/\b\w{4,}\b/g) ?? []);
@@ -32,9 +40,9 @@ function wordOverlap(a: string, b: string): number {
   return overlap / Math.max(A.size, B.size);
 }
 
-/** Default adjudicator: asks the configured LLM. Returns NONE when no LLM is available. */
+/** Default adjudicator: asks the reconcile LLM (falls back to main provider). Returns NONE when no LLM is available. */
 export const llmAdjudicate: Adjudicator = async (older, newer) => {
-  const resp = await llmComplete(
+  const resp = await llmReconcileComplete(
     `Memory A (older): "${older.content}"\nMemory B (newer): "${newer.content}"\n\n` +
       `How does B relate to A? Reply with exactly one word:\n` +
       `SUPERSEDES — B updates, replaces, or reverses A; A is now outdated.\n` +
@@ -78,7 +86,8 @@ export async function runReconcile(
   }
 
   const sample = active.slice(0, 100);
-  const scored: Array<{ a: Memory; b: Memory; overlap: number }> = [];
+  const vecs = new Map(sample.filter(m => m.embedding != null).map(m => [m.id, decodeVector(m.embedding as Buffer)]));
+  const scored: Array<{ a: Memory; b: Memory; score: number }> = [];
   for (let i = 0; i < sample.length; i++) {
     for (let j = i + 1; j < sample.length; j++) {
       const a = sample[i];
@@ -87,13 +96,17 @@ export async function runReconcile(
       if (a.scope !== b.scope) continue; // same scope only — no cross-project bleed
       if (existingPairs.has([a.id, b.id].sort().join(':'))) continue;
       const overlap = wordOverlap(a.content, b.content);
-      if (overlap < MIN_OVERLAP) continue;
-      scored.push({ a, b, overlap });
+      // Semantic gate: stored-embedding cosine admits paraphrase conflicts that
+      // share too little vocabulary for the lexical gate (mismatched dims → 0).
+      const av = vecs.get(a.id), bv = vecs.get(b.id);
+      const cos = av && bv ? cosineSim(av, bv) : 0;
+      if (overlap < MIN_OVERLAP && cos < MIN_SEMANTIC) continue;
+      scored.push({ a, b, score: Math.max(overlap, cos) });
     }
   }
 
   // Adjudicate the most topically-similar pairs first, then cap for cost.
-  scored.sort((x, y) => y.overlap - x.overlap);
+  scored.sort((x, y) => y.score - x.score);
 
   for (const { a, b } of scored.slice(0, MAX_PAIRS)) {
     const older = a.created_at <= b.created_at ? a : b;
@@ -103,9 +116,10 @@ export async function runReconcile(
 
     if (verdict === 'SUPERSEDES') {
       graph.addEdge(newer.id, older.id, 'supersedes', 1.0);
+      store.auditMutation('reconcile-supersede', older, `superseded by ${newer.id}`);
       store.update(older.id, {
         importance: Math.min(older.importance, 0.15),
-        metadata: { ...older.metadata, superseded_by: newer.id },
+        superseded_by: newer.id,
       });
       stats.supersessions++;
     } else if (verdict === 'CONTRADICTS') {

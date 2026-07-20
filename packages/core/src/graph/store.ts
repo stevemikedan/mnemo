@@ -58,6 +58,28 @@ export class MemoryStore {
     if (!cols.some(c => c.name === 'model')) {
       this.db.exec('ALTER TABLE adjudication_log ADD COLUMN model TEXT');
     }
+
+    // Promote the legacy metadata.superseded_by pointer to a first-class indexed
+    // column. Backfill from metadata, then strip it there so there's one source
+    // of truth (idempotent — only runs on DBs created before the column existed).
+    const memCols = this.db.prepare('PRAGMA table_info(memories)').all() as { name: string }[];
+    if (!memCols.some(c => c.name === 'superseded_by')) {
+      this.db.exec('ALTER TABLE memories ADD COLUMN superseded_by TEXT');
+      this.db.exec("UPDATE memories SET superseded_by = json_extract(metadata, '$.superseded_by') WHERE json_extract(metadata, '$.superseded_by') IS NOT NULL");
+      this.db.exec("UPDATE memories SET metadata = json_remove(metadata, '$.superseded_by') WHERE json_extract(metadata, '$.superseded_by') IS NOT NULL");
+    }
+    // Index created here (not in SCHEMA_SQL) so it never references the column
+    // before the migration above adds it on a pre-existing DB. Idempotent.
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_memories_superseded ON memories(superseded_by)');
+
+    // dream_audit gained grouping + reversal tracking after its first release.
+    const auditCols = this.db.prepare('PRAGMA table_info(dream_audit)').all() as { name: string }[];
+    if (auditCols.length && !auditCols.some(c => c.name === 'mutation_id')) {
+      this.db.exec('ALTER TABLE dream_audit ADD COLUMN mutation_id TEXT');
+    }
+    if (auditCols.length && !auditCols.some(c => c.name === 'restored_at')) {
+      this.db.exec('ALTER TABLE dream_audit ADD COLUMN restored_at TEXT');
+    }
   }
 
   create(opts: CreateMemoryOptions): Memory {
@@ -78,13 +100,14 @@ export class MemoryStore {
       tags: opts.tags ?? [],
       source: opts.source ?? 'user',
       metadata: opts.metadata ?? {},
+      superseded_by: null,
     };
 
     this.db.prepare(`
       INSERT INTO memories (id, content, type, scope, state, importance, confidence,
-        access_count, created_at, last_accessed, last_consolidated, embedding, tags, source, metadata)
+        access_count, created_at, last_accessed, last_consolidated, embedding, tags, source, metadata, superseded_by)
       VALUES (@id, @content, @type, @scope, @state, @importance, @confidence,
-        @access_count, @created_at, @last_accessed, @last_consolidated, @embedding, @tags, @source, @metadata)
+        @access_count, @created_at, @last_accessed, @last_consolidated, @embedding, @tags, @source, @metadata, @superseded_by)
     `).run({
       ...memory,
       tags: JSON.stringify(memory.tags),
@@ -117,7 +140,7 @@ export class MemoryStore {
     this.db.prepare('UPDATE memories SET embedding = ? WHERE id = ?').run(embedding, id);
   }
 
-  update(id: string, patch: Partial<Pick<Memory, 'content' | 'type' | 'scope' | 'state' | 'importance' | 'confidence' | 'tags' | 'metadata'>>): boolean {
+  update(id: string, patch: Partial<Pick<Memory, 'content' | 'type' | 'scope' | 'state' | 'importance' | 'confidence' | 'tags' | 'metadata' | 'superseded_by'>>): boolean {
     const sets: string[] = [];
     const params: Record<string, unknown> = { id };
     if (patch.content !== undefined) { sets.push('content = @content'); params.content = patch.content; }
@@ -128,6 +151,7 @@ export class MemoryStore {
     if (patch.confidence !== undefined) { sets.push('confidence = @confidence'); params.confidence = patch.confidence; }
     if (patch.tags !== undefined) { sets.push('tags = @tags'); params.tags = JSON.stringify(patch.tags); }
     if (patch.metadata !== undefined) { sets.push('metadata = @metadata'); params.metadata = JSON.stringify(patch.metadata); }
+    if (patch.superseded_by !== undefined) { sets.push('superseded_by = @superseded_by'); params.superseded_by = patch.superseded_by; }
     if (sets.length === 0) return false;
     const result = this.db.prepare(`UPDATE memories SET ${sets.join(', ')} WHERE id = @id`).run(params);
     return result.changes > 0;
@@ -138,11 +162,28 @@ export class MemoryStore {
     return this.db.prepare('DELETE FROM memories WHERE id = ?').run(id).changes > 0;
   }
 
-  /** Record that a recalled memory was actually used for a query (implicit feedback for a future reranker). */
-  recordFeedback(query: string, memoryId: string): void {
+  /**
+   * Record whether a recalled memory was actually used for a query — the
+   * reranker's training signal. `used=false` rows are impressions: shown to the
+   * answering LLM but not cited, i.e. true retrieval negatives.
+   */
+  recordFeedback(query: string, memoryId: string, used = true): void {
     this.db.prepare(
-      'INSERT INTO recall_feedback (id, query, memory_id, features, used, created_at) VALUES (?, ?, ?, NULL, 1, ?)',
-    ).run(uuidv4(), query, memoryId, new Date().toISOString());
+      'INSERT INTO recall_feedback (id, query, memory_id, features, used, created_at) VALUES (?, ?, ?, NULL, ?, ?)',
+    ).run(uuidv4(), query, memoryId, used ? 1 : 0, new Date().toISOString());
+  }
+
+  /**
+   * Snapshot a memory's pre-mutation state into dream_audit. Called before the
+   * destructive dream mutations (NREM merge content-overwrite/expiry, reconcile
+   * supersession demotion) so a wrong LLM verdict can be recovered by hand.
+   * The embedding blob is omitted — it's recomputable, and it's bulk.
+   */
+  auditMutation(phase: string, memory: Memory, note?: string, mutationId?: string): void {
+    const { embedding, ...snapshot } = memory;
+    this.db.prepare(
+      'INSERT INTO dream_audit (id, mutation_id, phase, memory_id, before_state, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    ).run(uuidv4(), mutationId ?? uuidv4(), phase, memory.id, JSON.stringify(snapshot), note ?? null, new Date().toISOString());
   }
 
   /** Distinct scope strings present in the store, sorted. */

@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { answerFromMemories } from '@mnemo/core';
+import { answerFromMemories, expandConflicts } from '@mnemo/core';
 import type { MemoryStore } from '@mnemo/core';
 import type { GraphStore } from '@mnemo/core';
 import type { RecallEngine } from '@mnemo/core';
@@ -123,8 +123,10 @@ export function registerReadTools(server: McpServer, store: MemoryStore, graph: 
     if (hits.length === 0) {
       return { content: [{ type: 'text' as const, text: 'No stored memories match that question.' }] };
     }
-    const answer = await answerFromMemories(question, hits.map(h => h.memory));
-    const sources = hits.map((h, i) => `[${i + 1}] (${h.memory.type}) ${h.memory.content.slice(0, 100)}`).join('\n');
+    // Pull in known contradiction partners so the answer presents both sides.
+    const grounded = expandConflicts(store, graph, hits.map(h => h.memory));
+    const answer = await answerFromMemories(question, grounded.memories, undefined, grounded.conflicts);
+    const sources = grounded.memories.map((m, i) => `[${i + 1}] (${m.type}) ${m.content.slice(0, 100)}`).join('\n');
     if (answer) {
       return { content: [{ type: 'text' as const, text: `${answer}\n\nSources:\n${sources}` }] };
     }

@@ -24,6 +24,17 @@ describe('runNREM (parameterized adjudicator)', () => {
     expect((store.db.prepare('SELECT state FROM memories WHERE id=?').get(a.id) as any).state).toBe('active');
   });
 
+  it('a merge records a derived-from edge (survivor→absorbed), never a supersedes', async () => {
+    const { store, graph } = setup();
+    const a = store.create({ content: 'the project uses pnpm workspaces for the monorepo', importance: 0.6, scope: 'global' });
+    const b = store.create({ content: 'the project uses pnpm workspaces for the monorepo', importance: 0.5, scope: 'global' });
+    await runNREM(store, graph, store.query({}));
+    const edges = store.db.prepare('SELECT from_id, to_id, type FROM memory_edges').all() as any[];
+    // Product→source: the surviving memory (a) is derived from the absorbed one (b).
+    expect(edges).toContainEqual({ from_id: a.id, to_id: b.id, type: 'derived-from' });
+    expect(edges.some(e => e.type === 'supersedes')).toBe(false);
+  });
+
   it('respects an injected adjudicator (SKIP → no merge)', async () => {
     const { store, graph } = setup();
     store.create({ content: 'the project uses pnpm workspaces for the monorepo', scope: 'global' });
