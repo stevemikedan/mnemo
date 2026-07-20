@@ -108,3 +108,37 @@ describe('learned reranker', () => {
     expect(report.trained).toBe(false);
   });
 });
+
+describe('decision-time feature snapshots', () => {
+  it('trains from logged snapshots even when the memories no longer exist', async () => {
+    const store = new MemoryStore(':memory:');
+    // No memories in the store at all: the legacy recompute path (BM25 pool
+    // over current memories) can produce zero samples, so trained=true proves
+    // training consumed the persisted snapshots.
+    for (let q = 0; q < 12; q++) {
+      const query = `snapshot query ${q}`;
+      const jitter = q / 120; // vary rows slightly so the split isn't degenerate
+      store.recordFeedback(query, `gone-pos-${q}`, true,
+        { features: [0.6, 0.5, 0.9, 0.1 + jitter, 0.1, 0.3, 1, 0.2], rank: 1, fusedScore: 0.04 });
+      for (let i = 0; i < 3; i++) {
+        store.recordFeedback(query, `gone-neg-${q}-${i}`, false,
+          { features: [0.6, 0.5, 0.1, 0.1 + jitter, 0.1, 0.3, 1, 0.2], rank: i + 2, fusedScore: 0.02 });
+      }
+    }
+    expect(store.query({})).toHaveLength(0); // nothing to recompute from
+    const report = await trainReranker(store);
+    expect(report.trained).toBe(true);
+  });
+
+  it('ignores snapshots of a stale feature dimension instead of failing', async () => {
+    const store = new MemoryStore(':memory:');
+    const used = seed(store);
+    for (const [query, m] of used) {
+      // A snapshot logged before a feature was added: wrong length → must be
+      // treated as absent (legacy recompute), not poison the training matrix.
+      store.recordFeedback(query, m.id, true, { features: [0.5, 0.5, 0.9], rank: 1, fusedScore: 0.04 });
+    }
+    const report = await trainReranker(store);
+    expect(report.trained).toBe(true); // recompute path still produced a model
+  });
+});

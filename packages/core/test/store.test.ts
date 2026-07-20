@@ -134,3 +134,46 @@ describe('MemoryStore.query filters', () => {
     expect(store.query({ states: ['archived'] }).map(m => m.content)).toEqual(['archived']);
   });
 });
+
+describe('recall_feedback decision-time snapshots', () => {
+  it('persists features/rank/fused_score when given, NULLs otherwise', () => {
+    const store = new MemoryStore(':memory:');
+    const m = store.create({ content: 'snapshotted' });
+    store.recordFeedback('q1', m.id, true, { features: [0.5, 0.4, 0.9, 0, 0, 0.2, 1, 0.1], rank: 2, fusedScore: 0.031 });
+    store.recordFeedback('q2', m.id, false); // record_use-style call: no retrieval context
+
+    const rows = store.db.prepare(
+      'SELECT query, features, rank, fused_score, used FROM recall_feedback ORDER BY query',
+    ).all() as { query: string; features: string | null; rank: number | null; fused_score: number | null; used: number }[];
+    expect(rows).toHaveLength(2);
+    expect(JSON.parse(rows[0].features!)).toEqual([0.5, 0.4, 0.9, 0, 0, 0.2, 1, 0.1]);
+    expect(rows[0].rank).toBe(2);
+    expect(rows[0].fused_score).toBeCloseTo(0.031);
+    expect(rows[1].features).toBeNull();
+    expect(rows[1].rank).toBeNull();
+    expect(rows[1].fused_score).toBeNull();
+  });
+
+  it('migration adds rank/fused_score to a pre-snapshot DB without losing rows', () => {
+    const dbPath = join(mkdtempSync(join(tmpdir(), 'mnemo-fb-')), 'test.db');
+    const old = new Database(dbPath);
+    // recall_feedback as it shipped before the snapshot columns existed.
+    old.exec(`CREATE TABLE recall_feedback (
+      id TEXT PRIMARY KEY, query TEXT NOT NULL, memory_id TEXT NOT NULL,
+      features TEXT, used INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL
+    )`);
+    old.prepare(`INSERT INTO recall_feedback (id, query, memory_id, used, created_at)
+      VALUES ('r1', 'legacy query', 'm1', 1, '2026-01-01T00:00:00Z')`).run();
+    old.close();
+
+    const store = new MemoryStore(dbPath); // constructor runs the migration
+    const row = store.db.prepare('SELECT query, rank, fused_score FROM recall_feedback').get() as any;
+    expect(row.query).toBe('legacy query'); // legacy row survived
+    expect(row.rank).toBeNull();
+    expect(row.fused_score).toBeNull();
+    // And the new write path works against the migrated table.
+    store.recordFeedback('new query', 'm2', true, { features: [1, 0, 0, 0, 0, 0, 1, 0], rank: 1, fusedScore: 0.5 });
+    const n = store.db.prepare('SELECT COUNT(*) AS n FROM recall_feedback WHERE rank = 1').get() as { n: number };
+    expect(n.n).toBe(1);
+  });
+});

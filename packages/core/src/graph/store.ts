@@ -80,6 +80,15 @@ export class MemoryStore {
     if (auditCols.length && !auditCols.some(c => c.name === 'restored_at')) {
       this.db.exec('ALTER TABLE dream_audit ADD COLUMN restored_at TEXT');
     }
+
+    // recall_feedback gained decision-time snapshot columns (rank, fused_score).
+    const fbCols = this.db.prepare('PRAGMA table_info(recall_feedback)').all() as { name: string }[];
+    if (fbCols.length && !fbCols.some(c => c.name === 'rank')) {
+      this.db.exec('ALTER TABLE recall_feedback ADD COLUMN rank INTEGER');
+    }
+    if (fbCols.length && !fbCols.some(c => c.name === 'fused_score')) {
+      this.db.exec('ALTER TABLE recall_feedback ADD COLUMN fused_score REAL');
+    }
   }
 
   create(opts: CreateMemoryOptions): Memory {
@@ -166,11 +175,31 @@ export class MemoryStore {
    * Record whether a recalled memory was actually used for a query — the
    * reranker's training signal. `used=false` rows are impressions: shown to the
    * answering LLM but not cited, i.e. true retrieval negatives.
+   *
+   * `snapshot` captures the decision-time context: the rerankFeatures vector as
+   * computed when the memory was shown (training prefers this over recomputing
+   * from a store whose importance/access/degree have since drifted), the
+   * 1-based rank it was shown at, and its fused retrieval score. Callers
+   * without retrieval context (e.g. the record_use tool) omit it.
    */
-  recordFeedback(query: string, memoryId: string, used = true): void {
+  recordFeedback(
+    query: string,
+    memoryId: string,
+    used = true,
+    snapshot?: { features?: number[]; rank?: number; fusedScore?: number },
+  ): void {
     this.db.prepare(
-      'INSERT INTO recall_feedback (id, query, memory_id, features, used, created_at) VALUES (?, ?, ?, NULL, ?, ?)',
-    ).run(uuidv4(), query, memoryId, used ? 1 : 0, new Date().toISOString());
+      'INSERT INTO recall_feedback (id, query, memory_id, features, rank, fused_score, used, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(
+      uuidv4(),
+      query,
+      memoryId,
+      snapshot?.features ? JSON.stringify(snapshot.features) : null,
+      snapshot?.rank ?? null,
+      snapshot?.fusedScore ?? null,
+      used ? 1 : 0,
+      new Date().toISOString(),
+    );
   }
 
   /**

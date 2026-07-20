@@ -187,3 +187,55 @@ describe('unknown routes', () => {
     expect(r.status).toBe(404);
   });
 });
+
+describe('citation feedback decision-time snapshots', () => {
+  it('persists features, rank, and fused score when retrieval context is supplied', () => {
+    const a = store.create({ content: 'snap cited', scope: 'global', importance: 0.8 });
+    const b = store.create({ content: 'snap shown only', scope: 'global', importance: 0.2 });
+    const retrieval = new Map([
+      [a.id, { bm25: 3, cosine: 0.7, score: 0.04 }],
+      [b.id, { bm25: 1, cosine: 0.1, score: 0.02 }],
+    ]);
+    const degrees = new Map([[a.id, 4]]);
+    recordCitationFeedback(store, 'snapshot query?', 'Yes, per [1].',
+      [{ memory: a }, { memory: b }], retrieval, degrees);
+
+    const rows = store.db.prepare(
+      `SELECT memory_id, features, rank, fused_score, used FROM recall_feedback WHERE query = 'snapshot query?' ORDER BY rank`,
+    ).all() as { memory_id: string; features: string | null; rank: number; fused_score: number; used: number }[];
+    expect(rows).toHaveLength(2);
+
+    expect(rows[0].memory_id).toBe(a.id);
+    expect(rows[0].used).toBe(1);
+    expect(rows[0].rank).toBe(1);
+    expect(rows[0].fused_score).toBeCloseTo(0.04);
+    const fa = JSON.parse(rows[0].features!);
+    expect(fa).toHaveLength(8);
+    expect(fa[0]).toBeCloseTo(3 / 4);   // squashed bm25
+    expect(fa[1]).toBeCloseTo(0.7);     // cosine
+    expect(fa[2]).toBeCloseTo(0.8);     // importance at decision time
+    expect(fa[7]).toBeCloseTo(0.4);     // degree 4 / 10
+
+    expect(rows[1].memory_id).toBe(b.id);
+    expect(rows[1].used).toBe(0);       // impression, with its own snapshot
+    expect(rows[1].rank).toBe(2);
+    const fb = JSON.parse(rows[1].features!);
+    expect(fb[7]).toBe(0);              // absent from degree map → 0
+  });
+
+  it('conflict partners outside the retrieval map still get a snapshot with zero scores', () => {
+    const shown = store.create({ content: 'partner pulled by expandConflicts', scope: 'global', importance: 0.6 });
+    const cited = store.create({ content: 'the retrieved one', scope: 'global' });
+    const retrieval = new Map([[cited.id, { bm25: 2, cosine: 0.5, score: 0.03 }]]);
+    recordCitationFeedback(store, 'partner query?', 'See [1].',
+      [{ memory: cited }, { memory: shown }], retrieval, new Map());
+
+    const row = store.db.prepare(
+      `SELECT features FROM recall_feedback WHERE query = 'partner query?' AND memory_id = ?`,
+    ).get(shown.id) as { features: string | null };
+    const f = JSON.parse(row.features!);
+    expect(f[0]).toBe(0); // bm25 unknown → 0: retrieval genuinely didn't surface it
+    expect(f[1]).toBe(0);
+    expect(f[2]).toBeCloseTo(0.6); // but memory-side attributes are still captured
+  });
+});

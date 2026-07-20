@@ -70,30 +70,47 @@ interface PersistedRerankerModel {
 
 let cache: { key: string; clf: ElmClassifier<Label> | null } | null = null;
 
+/** Parse a decision-time feature snapshot; null unless it's a finite number[]
+ * of the current feature dimension (schema-evolution safe). */
+function parseSnapshot(s: string | null): number[] | null {
+  if (!s) return null;
+  try {
+    const x = JSON.parse(s);
+    return Array.isArray(x) && x.length === RERANK_FEATURE_DIM
+      && x.every(v => typeof v === 'number' && Number.isFinite(v)) ? x : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Rebuild training pairs from recall_feedback and train the reranker. For each
- * distinct query: re-retrieve over the current store (BM25 + stored-embedding
- * cosine), label retrieved memories that were recorded as used 'used' and the
- * other top candidates 'skipped'. Persists only when it beats the majority
- * baseline on a held-out split. Intended to run during dream().
+ * Rebuild training pairs from recall_feedback and train the reranker. Rows
+ * carrying a decision-time feature snapshot train on it directly — the values
+ * the model will see at recall time, not values recomputed from a store whose
+ * importance/access/degree have since drifted. Legacy rows (and record_use
+ * rows, which have no retrieval context) fall back to re-retrieving over the
+ * current store (BM25 + stored-embedding cosine) and recomputing features.
+ * Persists only when it beats the majority baseline on a held-out split.
+ * Intended to run during dream().
  */
 export async function trainReranker(store: MemoryStore): Promise<ValidationReport<Label>> {
   const rows = store.db.prepare(
-    `SELECT query, memory_id, used FROM recall_feedback`,
-  ).all() as { query: string; memory_id: string; used: number }[];
+    `SELECT query, memory_id, used, features FROM recall_feedback ORDER BY created_at`,
+  ).all() as { query: string; memory_id: string; used: number; features: string | null }[];
 
-  const usedByQuery = new Map<string, Set<string>>();
-  const skippedByQuery = new Map<string, Set<string>>();
+  // Resolve one label + best snapshot per (query, memory) pair. A memory both
+  // cited and uncited for the same query (across turns) counts as used — one
+  // citation proves relevance. Later snapshots win (rows are in time order).
+  interface Resolved { used: boolean; snap: number[] | null }
+  const byQuery = new Map<string, Map<string, Resolved>>();
   for (const r of rows) {
-    const map = r.used ? usedByQuery : skippedByQuery;
-    if (!map.has(r.query)) map.set(r.query, new Set());
-    map.get(r.query)!.add(r.memory_id);
-  }
-  // A memory both cited and uncited for the same query (across turns) counts as
-  // used — one citation proves relevance.
-  for (const [q, usedIds] of usedByQuery) {
-    const skip = skippedByQuery.get(q);
-    if (skip) for (const id of usedIds) skip.delete(id);
+    let q = byQuery.get(r.query);
+    if (!q) byQuery.set(r.query, (q = new Map()));
+    const cur = q.get(r.memory_id) ?? { used: false, snap: null };
+    cur.used = cur.used || !!r.used;
+    const snap = parseSnapshot(r.features);
+    if (snap) cur.snap = snap;
+    q.set(r.memory_id, cur);
   }
 
   const candidates = store.query({ states: ['active', 'dormant'] });
@@ -103,27 +120,40 @@ export async function trainReranker(store: MemoryStore): Promise<ValidationRepor
   const degrees = edgeDegrees(store);
 
   const samples: { x: number[]; y: Label }[] = [];
-  for (const [query, usedIds] of usedByQuery) {
+  for (const [query, pairs] of byQuery) {
+    // Snapshot pairs train directly; the rest need recompute via re-retrieval.
+    const recompute = new Map<string, Resolved>();
+    let anyUsed = false;
+    for (const [id, p] of pairs) {
+      anyUsed = anyUsed || p.used;
+      if (p.snap) samples.push({ x: p.snap, y: p.used ? 'used' : 'skipped' });
+      else recompute.set(id, p);
+    }
+    // Positives anchor a query (zero-citation answers are never logged); no
+    // recompute work when every labeled pair carried a snapshot.
+    if (!anyUsed || recompute.size === 0) continue;
+
     const bm25 = index.search(query, TRAIN_POOL);
     const bm25Score = new Map(bm25.map(r => [r.memory.id, r.score]));
     const queryVec = (await embedText([query]))?.[0] ?? null;
-    const explicitNeg = skippedByQuery.get(query);
+    const hasExplicitNeg = [...pairs.values()].some(p => !p.used);
 
-    // Pool = BM25 top hits plus any used/impression memory that BM25 missed but
-    // a stored vector can still score — mirrors the hybrid retrieval the model
-    // reranks.
+    // Pool = BM25 top hits plus any labeled-but-unsnapshotted memory that BM25
+    // missed but a stored vector can still score — mirrors hybrid retrieval.
     const pool = new Map<string, Memory>(bm25.map(r => [r.memory.id, r.memory]));
     for (const c of candidates) {
-      if ((usedIds.has(c.id) || explicitNeg?.has(c.id)) && !pool.has(c.id)) pool.set(c.id, c);
+      if (recompute.has(c.id) && !pool.has(c.id)) pool.set(c.id, c);
     }
 
     let negatives = 0;
     for (const m of pool.values()) {
-      const positive = usedIds.has(m.id);
-      if (!positive && explicitNeg) {
+      if (pairs.has(m.id) && !recompute.has(m.id)) continue; // already sampled from its snapshot
+      const labeled = recompute.get(m.id);
+      const positive = labeled?.used ?? false;
+      if (!positive && hasExplicitNeg) {
         // This query has logged impressions (shown-but-uncited) — those are the
         // only trustworthy negatives; don't dilute them with mined guesses.
-        if (!explicitNeg.has(m.id)) continue;
+        if (!labeled || labeled.used) continue;
       } else if (!positive && negatives >= NEG_PER_QUERY) {
         continue;
       }
@@ -131,7 +161,7 @@ export async function trainReranker(store: MemoryStore): Promise<ValidationRepor
         ? cosineSim(queryVec, decodeVector(m.embedding as Buffer))
         : 0;
       const b = bm25Score.get(m.id) ?? 0;
-      if (!positive && b === 0 && cos === 0 && !explicitNeg?.has(m.id)) continue; // never retrieved — not a real negative
+      if (!positive && b === 0 && cos === 0 && !labeled) continue; // never retrieved — not a real negative
       samples.push({ x: rerankFeatures(m, b, cos, nowMs, degrees.get(m.id) ?? 0), y: positive ? 'used' : 'skipped' });
       if (!positive) negatives++;
     }

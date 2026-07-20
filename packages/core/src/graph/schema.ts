@@ -66,14 +66,20 @@ export const SCHEMA_SQL = `
     created_at   TEXT NOT NULL
   );
 
-  -- Implicit feedback for a future recall reranker (see record_use).
+  -- Implicit feedback for the recall reranker (see record_use). features/rank/
+  -- fused_score are decision-time snapshots taken when the memory was shown:
+  -- training on them avoids the drift of recomputing importance/access/degree
+  -- from a store that has since changed. rank is the 1-based position in the
+  -- list shown to the LLM (kept for position-bias analysis, NOT a feature).
   CREATE TABLE IF NOT EXISTS recall_feedback (
-    id         TEXT PRIMARY KEY,
-    query      TEXT NOT NULL,
-    memory_id  TEXT NOT NULL,
-    features   TEXT,            -- JSON, optional
-    used       INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL
+    id          TEXT PRIMARY KEY,
+    query       TEXT NOT NULL,
+    memory_id   TEXT NOT NULL,
+    features    TEXT,            -- JSON number[] (rerankFeatures at decision time)
+    rank        INTEGER,
+    fused_score REAL,
+    used        INTEGER NOT NULL DEFAULT 1,
+    created_at  TEXT NOT NULL
   );
 
   CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope);

@@ -2,7 +2,7 @@ import type { ViteDevServer } from 'vite';
 import { writeFileSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import { MemoryStore, GraphStore, dream, searchHybrid, readConfig, reloadConfig, reindexEmbeddings, answerFromMemories, chatWithMemories, condenseQuery, expandConflicts, getMlStatus, evaluateRetrieval, edgeDegrees, listAudit, restoreMutation } from '@mnemo/core';
+import { MemoryStore, GraphStore, dream, searchHybrid, readConfig, reloadConfig, reindexEmbeddings, answerFromMemories, chatWithMemories, condenseQuery, expandConflicts, getMlStatus, evaluateRetrieval, edgeDegrees, rerankFeatures, listAudit, restoreMutation } from '@mnemo/core';
 import type { MemoryType, EdgeType, MemoryState, ChatMessage } from '@mnemo/core';
 
 /** Drop the vector BLOB before serializing a memory to the client. */
@@ -19,13 +19,37 @@ function stripEmb(m: any): any {
  * when at least one citation exists: an answer with zero citations usually
  * means "no stored memory answers that", which says the query was unanswerable,
  * not that the retrieval was wrong.
+ *
+ * When `retrieval` (per-memory bm25/cosine/fused score from searchHybrid) and
+ * `degrees` are provided, each row also carries a decision-time snapshot: the
+ * rerankFeatures vector exactly as computed when the memory was shown, the
+ * 1-based rank it was shown at, and its fused score. Training prefers these
+ * snapshots over recomputing from a store that has since drifted. Conflict
+ * partners pulled in by expandConflicts snapshot bm25/cosine 0 — accurate,
+ * since retrieval didn't surface them.
  */
-export function recordCitationFeedback(store: MemoryStore, query: string, answer: string | null, sources: { memory: any }[]): void {
+export function recordCitationFeedback(
+  store: MemoryStore,
+  query: string,
+  answer: string | null,
+  sources: { memory: any }[],
+  retrieval?: Map<string, { bm25: number; cosine: number; score: number }>,
+  degrees?: Map<string, number>,
+): void {
   if (!answer || !query.trim()) return;
   const cited = new Set<number>();
   for (const m of answer.matchAll(/\[(\d{1,2})\]/g)) cited.add(Number(m[1]));
   if (cited.size === 0) return;
-  sources.forEach((src, i) => store.recordFeedback(query, src.memory.id, cited.has(i + 1)));
+  const nowMs = Date.now();
+  sources.forEach((src, i) => {
+    const r = retrieval?.get(src.memory.id);
+    const snapshot = retrieval ? {
+      features: rerankFeatures(src.memory, r?.bm25 ?? 0, r?.cosine ?? 0, nowMs, degrees?.get(src.memory.id) ?? 0),
+      rank: i + 1,
+      fusedScore: r?.score,
+    } : undefined;
+    store.recordFeedback(query, src.memory.id, cited.has(i + 1), snapshot);
+  });
 }
 
 // Helper to parse JSON body from Node.js IncomingMessage
@@ -495,12 +519,14 @@ export function createApiHandler(store: MemoryStore, graph: GraphStore) {
                 .map(r => ({ ...r, tags: JSON.parse(r.tags), metadata: JSON.parse(r.metadata) }))
                 // Never ground an answer in a fact reconcile has marked outdated.
                 .filter(m => !m.superseded_by);
-              const top = await searchHybrid(parsed, query, 6, edgeDegrees(store));
+              const degrees = edgeDegrees(store);
+              const top = await searchHybrid(parsed, query, 6, degrees);
               // Pull in known contradiction partners so the answer presents
               // both sides; sources/citations index into the expanded list.
               const grounded = expandConflicts(store, graph, top.map(t => t.memory));
               const message = await chatWithMemories(messages, grounded.memories, undefined, grounded.conflicts);
-              recordCitationFeedback(store, query, message, grounded.memories.map(m => ({ memory: m })));
+              const retrieval = new Map(top.map(t => [t.memory.id, { bm25: t.bm25 ?? 0, cosine: t.cosine ?? 0, score: t.score }]));
+              recordCitationFeedback(store, query, message, grounded.memories.map(m => ({ memory: m })), retrieval, degrees);
               res.statusCode = 200;
               res.end(JSON.stringify({ message, sources: grounded.memories.map(stripEmb), conflicts: grounded.conflicts }));
               return;
@@ -524,10 +550,12 @@ export function createApiHandler(store: MemoryStore, graph: GraphStore) {
                 .map(r => ({ ...r, tags: JSON.parse(r.tags), metadata: JSON.parse(r.metadata) }))
                 // Never ground an answer in a fact reconcile has marked outdated.
                 .filter(m => !m.superseded_by);
-              const top = await searchHybrid(parsed, query, 6, edgeDegrees(store));
+              const degrees = edgeDegrees(store);
+              const top = await searchHybrid(parsed, query, 6, degrees);
               const grounded = expandConflicts(store, graph, top.map(t => t.memory));
               const answer = await answerFromMemories(query, grounded.memories, undefined, grounded.conflicts);
-              recordCitationFeedback(store, query, answer, grounded.memories.map(m => ({ memory: m })));
+              const retrieval = new Map(top.map(t => [t.memory.id, { bm25: t.bm25 ?? 0, cosine: t.cosine ?? 0, score: t.score }]));
+              recordCitationFeedback(store, query, answer, grounded.memories.map(m => ({ memory: m })), retrieval, degrees);
               res.statusCode = 200;
               res.end(JSON.stringify({ answer, sources: grounded.memories.map(stripEmb), conflicts: grounded.conflicts }));
               return;
